@@ -1,0 +1,22 @@
+version: "3.9"
+services:
+  db:
+    image: postgres:16
+    container_name: instituto_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: instituto_admin
+      POSTGRES_PASSWORD: instituto_pass
+      POSTGRES_DB: instituto_erp
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U instituto_admin"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
