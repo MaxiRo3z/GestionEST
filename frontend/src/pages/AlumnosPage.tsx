@@ -200,7 +200,7 @@ function InscribirModal({ alumno, cursos, onClose, onDone }: { alumno: Alumno | 
   const submit = async () => {
     setError(""); setSaving(true);
     try {
-      await InscripcionesApi.crear({ alumno_id: alumno.id, curso_id: Number(cursoId), diaVencimiento: Number(diaVencimiento) });
+      await InscripcionesApi.crear({ alumno_id: alumno.id, curso_id: Number(cursoId), dia_vencimiento: Number(diaVencimiento) });
       setOk(true);
     } catch (e) {
       setError((e as Error).message);
@@ -223,7 +223,7 @@ function InscribirModal({ alumno, cursos, onClose, onDone }: { alumno: Alumno | 
               label="Curso"
               value={cursoId}
               onChange={setCursoId}
-              options={[{ value: "", label: "-- Seleccionar curso --" }, ...cursos.map((c) => ({ value: String(c.id), label: c.nombre }))]}
+              options= {[...cursos.map((c) => ({ value: String(c.id), label: c.nombre }))]}
               required
             />
             <Input label="Día de vencimiento mensual (1-28)" type="number" value={diaVencimiento} onChange={setDiaVencimiento} required />

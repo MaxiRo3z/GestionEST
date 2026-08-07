@@ -1,4 +1,23 @@
 @import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@theme {
+  /* Paleta Dorada / Arena */
+  --color-brand-gold-light: #C2A373;
+  --color-brand-gold: #B0905F;
+  --color-brand-gold-dark: #91754B;
+
+  /* Paleta Terracota / Rojizos */
+  --color-brand-terra-light: #B07B69;
+  --color-brand-terra: #9A6756;
+  --color-brand-terra-dark: #7D5142;
+
+  /* Paleta Grises */
+  --color-brand-gray: #5A5859;
+  --color-brand-gray-dark: #464445;
+}
 
 :root {
   color-scheme: light;
@@ -7,7 +26,7 @@
 body {
   margin: 0;
   font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  background-color: #f5f6f8;
+  background-color: #474747;
   color: #1c1f26;
 }
 
