@@ -2,7 +2,7 @@ import { api } from "./client";
 import type {
   Curso, Alumno, Inscripcion, Cuota, MetodoPago, Pago,
   Profesor, AsistenciaProfesor, Liquidacion, AsistenciaAlumno, Gasto,
-  Balance, DashboardAlertas,
+  Balance, DashboardAlertas, Comprobante
 } from "./types";
 
 // ---- Cursos ----
@@ -21,6 +21,9 @@ export const AlumnosApi = {
   listar: () => api.get<Alumno[]>("/api/alumnos"),
   crear: (data: { dni: string; nombre: string; apellido: string; telefono?: string; email?: string }) =>
     api.post<Alumno>("/api/alumnos", data),
+  modificar: (id: number, data: { dni: string; nombre: string; apellido: string; telefono?: string; email?: string }) =>
+    api.put<Alumno>(`/api/alumnos/${id}`, data),
+  eliminar: (id: number) => api.del(`/api/alumnos/${id}`),
 };
 
 // ---- Inscripciones ----
@@ -67,6 +70,8 @@ export const ProfesoresApi = {
     api.get<Liquidacion[]>(`/api/profesores/liquidaciones${profesorId ? `?profesor_id=${profesorId}` : ""}`),
   marcarLiquidacionPagada: (id: number) =>
     api.post<Liquidacion>(`/api/profesores/liquidaciones/${id}/marcar-pagada`),
+  modificarLiquidacion: (id: number, data: { horas_totales: string | number; descuentos: string | number }) => 
+    api.put<Liquidacion>(`/api/profesores/liquidaciones/${id}`, data),
 };
 
 // ---- Asistencia de alumnos ----
@@ -79,13 +84,24 @@ export const AsistenciasAlumnosApi = {
 
 // ---- Gastos y caja ----
 export const GastosApi = {
-  listar: () => api.get<Gasto[]>("/api/gastos"),
+  listar: (anio: number, mes: number) => 
+    api.get<Gasto[]>(`/api/gastos?anio=${anio}&mes=${mes}`),
   crear: (data: { categoria: string; descripcion?: string; monto: string; fecha: string; recurrente: boolean }) =>
     api.post<Gasto>("/api/gastos", data),
-  balance: (anio: number, mes: number) => api.get<Balance>(`/api/gastos/balance?anio=${anio}&mes=${mes}`),
+  modificar: (id: number, data: { categoria: string; descripcion?: string; monto: string; fecha: string; recurrente: boolean }) =>
+    api.put<Gasto>(`/api/gastos/${id}`, data),
+  eliminar: (id: number) => 
+    api.del(`/api/gastos/${id}`),
+  balance: (anio: number, mes: number) => 
+    api.get<Balance>(`/api/gastos/balance?anio=${anio}&mes=${mes}`),
 };
 
 // ---- Dashboard ----
 export const DashboardApi = {
   alertas: (diasProximos = 7) => api.get<DashboardAlertas>(`/api/dashboard/alertas?dias_proximos=${diasProximos}`),
+};
+
+export const ComprobantesApi = {
+  listarPorAlumno: (alumnoId: number) => api.get<Comprobante[]>(`/api/comprobantes/alumno/${alumnoId}`),
+  listarPorProfesor: (profesorId: number) => api.get<Comprobante[]>(`/api/comprobantes/profesor/${profesorId}`),
 };

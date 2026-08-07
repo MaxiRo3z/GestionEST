@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { AlumnosApi, CursosApi, InscripcionesApi } from "../api/modules";
-import type { Alumno, Curso, Inscripcion } from "../api/types";
+import { AlumnosApi, CursosApi, InscripcionesApi, ComprobantesApi } from "../api/modules";
+import type { Alumno, Curso, Inscripcion, Comprobante } from "../api/types";
 import { Card, CardHeader, Button, Input, Select, Modal, ErrorBanner, Badge, EmptyState } from "../components/ui";
 import { formatMoney } from "../lib/format";
 
@@ -9,8 +9,15 @@ export default function AlumnosPage() {
   const [inscripciones, setInscripciones] = useState<Inscripcion[]>([]);
   const [cursos, setCursos] = useState<Curso[]>([]);
   const [error, setError] = useState("");
+  
   const [showCreateAlumno, setShowCreateAlumno] = useState(false);
+  const [alumnoAEditar, setAlumnoAEditar] = useState<Alumno | null>(null);
   const [showInscribir, setShowInscribir] = useState<Alumno | null>(null);
+  
+  // NUEVO ESTADO: Para saber de qué alumno estamos viendo los comprobantes
+  const [alumnoComprobantes, setAlumnoComprobantes] = useState<Alumno | null>(null);
+  
+  const alumnosActivos = alumnos.filter(a => a.activo !== false);
 
   const cargarTodo = () => {
     Promise.all([AlumnosApi.listar(), InscripcionesApi.listar(), CursosApi.listar()])
@@ -19,6 +26,17 @@ export default function AlumnosPage() {
   };
 
   useEffect(() => { cargarTodo(); }, []);
+
+  const eliminarAlumno = async (alumno: Alumno) => {
+    if (!window.confirm(`¿Estás seguro de eliminar a ${alumno.nombre} ${alumno.apellido}? Se borrarán también sus inscripciones y cuotas pendientes.`)) return;
+    
+    try {
+      await AlumnosApi.eliminar(alumno.id);
+      cargarTodo();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
 
   const cursoNombre = (id: number) => cursos.find((c) => c.id === id)?.nombre ?? `Curso #${id}`;
 
@@ -37,17 +55,40 @@ export default function AlumnosPage() {
       <Card>
         <CardHeader title="Alumnos" />
         <div className="divide-y divide-slate-100">
-          {alumnos.length === 0 && <EmptyState text="Todavía no hay alumnos cargados" />}
-          {alumnos.map((alumno) => {
+          {alumnosActivos.length === 0 && <EmptyState text="Todavía no hay alumnos cargados" />}
+          {alumnosActivos.map((alumno) => {
             const suyas = inscripciones.filter((i) => i.alumno_id === alumno.id);
             return (
-              <div key={alumno.id} className="px-5 py-4">
-                <div className="flex items-center justify-between">
+              <div key={alumno.id} className="px-5 py-4 hover:bg-slate-50 transition-colors">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
                     <p className="font-medium text-slate-800">{alumno.nombre} {alumno.apellido}</p>
                     <p className="text-xs text-slate-400">DNI {alumno.dni} {alumno.telefono ? `· ${alumno.telefono}` : ""}</p>
                   </div>
-                  <Button variant="secondary" onClick={() => setShowInscribir(alumno)}>Inscribir a curso</Button>
+                  
+                  <div className="flex items-center gap-2">
+                    {/* NUEVO BOTÓN: Ver Comprobantes */}
+                    <button 
+                      onClick={() => setAlumnoComprobantes(alumno)}
+                      className="text-emerald-600 hover:text-emerald-800 font-medium text-xs px-2 py-1"
+                    >
+                      Ver Comprobantes
+                    </button>
+                    
+                    <button 
+                      onClick={() => setAlumnoAEditar(alumno)} 
+                      className="text-blue-600 hover:text-blue-800 font-medium text-xs px-2 py-1"
+                    >
+                      Editar
+                    </button>
+                    <button 
+                      onClick={() => eliminarAlumno(alumno)} 
+                      className="text-rose-600 hover:text-rose-800 font-medium text-xs px-2 py-1 border-r border-slate-200 pr-4 mr-2"
+                    >
+                      Eliminar
+                    </button>
+                    <Button variant="secondary" onClick={() => setShowInscribir(alumno)}>Inscribir a curso</Button>
+                  </div>
                 </div>
                 {suyas.length > 0 && (
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -64,13 +105,25 @@ export default function AlumnosPage() {
         </div>
       </Card>
 
-      <CrearAlumnoModal open={showCreateAlumno} onClose={() => setShowCreateAlumno(false)} onCreated={() => { setShowCreateAlumno(false); cargarTodo(); }} />
+      <GestionarAlumnoModal 
+        open={showCreateAlumno || !!alumnoAEditar} 
+        alumno={alumnoAEditar}
+        onClose={() => { setShowCreateAlumno(false); setAlumnoAEditar(null); }} 
+        onSaved={() => { setShowCreateAlumno(false); setAlumnoAEditar(null); cargarTodo(); }} 
+      />
       <InscribirModal alumno={showInscribir} cursos={cursos} onClose={() => setShowInscribir(null)} onDone={() => { setShowInscribir(null); cargarTodo(); }} />
+      
+      {/* NUEVO MODAL: Historial de Comprobantes */}
+      <HistorialComprobantesModal 
+        alumno={alumnoComprobantes} 
+        onClose={() => setAlumnoComprobantes(null)} 
+      />
     </div>
   );
 }
 
-function CrearAlumnoModal({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => void }) {
+// Unificamos el modal para Crear y Editar
+function GestionarAlumnoModal({ open, alumno, onClose, onSaved }: { open: boolean; alumno: Alumno | null; onClose: () => void; onSaved: () => void }) {
   const [dni, setDni] = useState("");
   const [nombre, setNombre] = useState("");
   const [apellido, setApellido] = useState("");
@@ -79,12 +132,31 @@ function CrearAlumnoModal({ open, onClose, onCreated }: { open: boolean; onClose
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // Precargar datos si estamos editando
+  useEffect(() => {
+    if (alumno) {
+      setDni(alumno.dni);
+      setNombre(alumno.nombre);
+      setApellido(alumno.apellido);
+      setTelefono(alumno.telefono || "");
+      setEmail(alumno.email || "");
+    } else {
+      setDni(""); setNombre(""); setApellido(""); setTelefono(""); setEmail("");
+    }
+  }, [alumno, open]);
+
   const submit = async () => {
     setError(""); setSaving(true);
     try {
-      await AlumnosApi.crear({ dni, nombre, apellido, telefono: telefono || undefined, email: email || undefined });
-      setDni(""); setNombre(""); setApellido(""); setTelefono(""); setEmail("");
-      onCreated();
+      const payload = { dni, nombre, apellido, telefono: telefono || undefined, email: email || undefined };
+      
+      if (alumno) {
+        await AlumnosApi.modificar(alumno.id, payload);
+      } else {
+        await AlumnosApi.crear(payload);
+      }
+      
+      onSaved();
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -92,8 +164,10 @@ function CrearAlumnoModal({ open, onClose, onCreated }: { open: boolean; onClose
     }
   };
 
+  const isEdicion = !!alumno;
+
   return (
-    <Modal open={open} onClose={onClose} title="Nuevo alumno">
+    <Modal open={open} onClose={onClose} title={isEdicion ? "Modificar alumno" : "Nuevo alumno"}>
       <div className="space-y-4">
         {error && <ErrorBanner message={error} />}
         <Input label="DNI" value={dni} onChange={setDni} required />
@@ -103,14 +177,17 @@ function CrearAlumnoModal({ open, onClose, onCreated }: { open: boolean; onClose
         </div>
         <Input label="Teléfono" value={telefono} onChange={setTelefono} />
         <Input label="Email" type="email" value={email} onChange={setEmail} />
+        
+        {/* Usamos el mismo truco para deshabilitar el botón si faltan los datos requeridos */}
         <Button className="w-full" onClick={submit} disabled={saving || !dni || !nombre || !apellido}>
-          {saving ? "Guardando..." : "Crear alumno"}
+          {saving ? "Guardando..." : (isEdicion ? "Guardar cambios" : "Crear alumno")}
         </Button>
       </div>
     </Modal>
   );
 }
 
+// ... (El componente InscribirModal queda igual que antes)
 function InscribirModal({ alumno, cursos, onClose, onDone }: { alumno: Alumno | null; cursos: Curso[]; onClose: () => void; onDone: () => void }) {
   const [cursoId, setCursoId] = useState("");
   const [diaVencimiento, setDiaVencimiento] = useState("10");
@@ -123,7 +200,7 @@ function InscribirModal({ alumno, cursos, onClose, onDone }: { alumno: Alumno | 
   const submit = async () => {
     setError(""); setSaving(true);
     try {
-      await InscripcionesApi.crear({ alumno_id: alumno.id, curso_id: Number(cursoId), dia_vencimiento: Number(diaVencimiento) });
+      await InscripcionesApi.crear({ alumno_id: alumno.id, curso_id: Number(cursoId), diaVencimiento: Number(diaVencimiento) });
       setOk(true);
     } catch (e) {
       setError((e as Error).message);
@@ -146,7 +223,7 @@ function InscribirModal({ alumno, cursos, onClose, onDone }: { alumno: Alumno | 
               label="Curso"
               value={cursoId}
               onChange={setCursoId}
-              options={cursos.map((c) => ({ value: String(c.id), label: c.nombre }))}
+              options={[{ value: "", label: "-- Seleccionar curso --" }, ...cursos.map((c) => ({ value: String(c.id), label: c.nombre }))]}
               required
             />
             <Input label="Día de vencimiento mensual (1-28)" type="number" value={diaVencimiento} onChange={setDiaVencimiento} required />
@@ -159,3 +236,60 @@ function InscribirModal({ alumno, cursos, onClose, onDone }: { alumno: Alumno | 
     </Modal>
   );
 }
+
+// NUEVO COMPONENTE: Modal para ver el historial de comprobantes
+function HistorialComprobantesModal({ alumno, onClose }: { alumno: Alumno | null; onClose: () => void; }) {
+  const [comprobantes, setComprobantes] = useState<Comprobante[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (alumno) {
+      setLoading(true);
+      ComprobantesApi.listarPorAlumno(alumno.id)
+        .then(setComprobantes)
+        .catch((e) => setError(e.message))
+        .finally(() => setLoading(false));
+    }
+  }, [alumno]);
+
+  if (!alumno) return null;
+
+  return (
+    <Modal open={!!alumno} onClose={onClose} title={`Comprobantes de ${alumno.nombre} ${alumno.apellido}`}>
+      <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+        {error && <ErrorBanner message={error} />}
+        
+        {loading ? (
+          <p className="text-center text-slate-500 py-4">Cargando historial...</p>
+        ) : comprobantes.length === 0 ? (
+          <div className="text-center py-6 bg-slate-50 rounded-lg border border-slate-100">
+            <p className="text-slate-500">Este alumno todavía no tiene comprobantes registrados.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-100 border border-slate-200 rounded-lg overflow-hidden">
+            {comprobantes.map((comp) => (
+              <div key={comp.id} className="p-3 flex items-center justify-between hover:bg-slate-50">
+                <div>
+                  <p className="font-semibold text-slate-800 text-sm">{comp.numero_comprobante}</p>
+                  <p className="text-xs text-slate-500">
+                    {comp.tipo.toUpperCase()} · Emitido el {new Date(comp.creado_en).toLocaleDateString("es-AR")}
+                  </p>
+                </div>
+                <Button 
+                  variant="secondary" 
+                  className="text-xs py-1.5 px-3 flex items-center gap-2"
+                  onClick={() => window.open(`http://localhost:8000/api/comprobantes/${comp.id}/pdf`, '_blank')}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path></svg>
+                  PDF
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+

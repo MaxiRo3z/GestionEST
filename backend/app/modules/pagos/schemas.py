@@ -51,3 +51,4 @@ class PagoOut(BaseModel):
     fecha_pago: datetime
     comprobante_nro: str | None = None
     tipo: str
+    comprobante_id: int | None = None

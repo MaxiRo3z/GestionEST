@@ -18,6 +18,7 @@ from app.modules.profesores.router import router as profesores_router
 from app.modules.asistencias.router import router as asistencias_alumnos_router
 from app.modules.gastos.router import router as gastos_router
 from app.modules.dashboard.router import router as dashboard_router
+from app.modules.comprobantes.router import router as comprobantes_router
 
 app = FastAPI(title=settings.APP_NAME)
 
@@ -37,7 +38,7 @@ app.include_router(profesores_router)
 app.include_router(asistencias_alumnos_router)
 app.include_router(gastos_router)
 app.include_router(dashboard_router)
-
+app.include_router(comprobantes_router)
 
 @app.get("/health")
 def health():

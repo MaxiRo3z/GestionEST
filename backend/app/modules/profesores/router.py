@@ -6,7 +6,7 @@ from app.db.session import get_db
 from app.modules.profesores.models import Profesor, AsistenciaProfesor, Liquidacion
 from app.modules.profesores.schemas import (
     ProfesorCreate, ProfesorOut, AsistenciaProfesorCreate, AsistenciaProfesorOut,
-    GenerarLiquidacionIn, LiquidacionOut,
+    GenerarLiquidacionIn, LiquidacionOut,LiquidacionUpdate
 )
 from app.modules.profesores import service
 
@@ -66,3 +66,29 @@ def marcar_pagada(liquidacion_id: int, db: Session = Depends(get_db)):
         return service.marcar_liquidacion_pagada(db, liquidacion_id)
     except ValueError as e:
         raise HTTPException(400, str(e))
+
+@router.put("/liquidaciones/{liquidacion_id}", response_model=LiquidacionOut)
+def editar_liquidacion(liquidacion_id: int, data: LiquidacionUpdate, db: Session = Depends(get_db)):
+    liq = db.get(Liquidacion, liquidacion_id)
+    if not liq:
+        raise HTTPException(404, "Liquidación no encontrada")
+    
+    if liq.pagado:
+        raise HTTPException(status_code=400, detail="No se puede modificar una liquidación que ya ha sido pagada.")
+
+    # Obtenemos al profesor para saber cuál es su valor por hora actual
+    profesor = db.get(Profesor, liq.profesor_id)
+    if not profesor:
+        raise HTTPException(404, "Profesor no encontrado")
+
+    # Actualizamos las horas y los descuentos
+    liq.horas_totales = data.horas_totales
+    liq.descuentos = data.descuentos
+    
+    # Recalculamos la plata automáticamente: Horas * Valor Hora
+    liq.valor_bruto = liq.horas_totales * profesor.valor_hora
+    liq.valor_neto = liq.valor_bruto - liq.descuentos
+    
+    db.commit()
+    db.refresh(liq)
+    return liq

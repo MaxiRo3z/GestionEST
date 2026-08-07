@@ -26,11 +26,10 @@ def crear_curso(db: Session, data: CursoCreate) -> Curso:
 def aplicar_ajuste_arancel(db: Session, curso_id: int, data: AjusteArancelIn) -> dict:
     """
     Aplica un aumento de arancel a un curso:
-    1. Inserta un nuevo CursoPrecio vigente (histórico preservado).
-    2. Actualiza valor_actualizado de TODAS las cuotas PENDIENTES (no pagadas)
-       de inscripciones activas en ese curso.
-    3. Deja un log en ajustes_precio por cada cuota tocada.
-    Las cuotas ya pagadas o vencidas-pagadas NUNCA se modifican.
+    1. Inserta un nuevo CursoPrecio vigente.
+    2. Actualiza valor_actualizado de TODAS las cuotas PENDIENTES.
+    3. (NUEVO) Actualiza valor_matricula_congelado de las inscripciones 
+       cuya matricula_pagada == False.
     """
     curso = db.get(Curso, curso_id)
     if not curso:
@@ -49,13 +48,11 @@ def aplicar_ajuste_arancel(db: Session, curso_id: int, data: AjusteArancelIn) ->
     )
     db.add(nuevo_precio)
 
-    # Traer todas las cuotas pendientes de inscripciones de este curso
+    # 1. Actualizar cuotas pendientes
     cuotas_pendientes = db.scalars(
         select(Cuota)
         .join(Cuota.inscripcion)
-        .where(
-            Cuota.estado.in_(["pendiente", "vencida"]),
-        )
+        .where(Cuota.estado.in_(["pendiente", "vencida"]))
     ).all()
 
     cuotas_tocadas = 0
@@ -75,5 +72,26 @@ def aplicar_ajuste_arancel(db: Session, curso_id: int, data: AjusteArancelIn) ->
         db.add(ajuste)
         cuotas_tocadas += 1
 
+    # 2. NUEVO: Actualizar matrículas impagas de ese curso
+    from app.modules.alumnos.models import Inscripcion # Importación local para evitar ciclos
+    inscripciones_sin_pagar = db.scalars(
+        select(Inscripcion).where(
+            Inscripcion.curso_id == curso.id,
+            Inscripcion.matricula_pagada == False,
+            Inscripcion.estado == "activa"
+        )
+    ).all()
+    
+    matriculas_tocadas = 0
+    for inscripcion in inscripciones_sin_pagar:
+        if inscripcion.valor_matricula_congelado != valor_matricula_nuevo:
+            inscripcion.valor_matricula_congelado = valor_matricula_nuevo
+            matriculas_tocadas += 1
+
     db.commit()
-    return {"curso_id": curso.id, "nuevo_precio_id": nuevo_precio.id, "cuotas_actualizadas": cuotas_tocadas}
+    return {
+        "curso_id": curso.id, 
+        "nuevo_precio_id": nuevo_precio.id, 
+        "cuotas_actualizadas": cuotas_tocadas,
+        "matriculas_actualizadas": matriculas_tocadas
+    }

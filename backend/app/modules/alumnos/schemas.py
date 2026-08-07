@@ -10,7 +10,13 @@ class AlumnoCreate(BaseModel):
     telefono: str | None = None
     email: str | None = None
 
-
+class AlumnoUpdate(BaseModel):
+    dni: str
+    nombre: str
+    apellido: str
+    telefono: str | None = None
+    email: str | None = None
+    
 class AlumnoOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
@@ -19,6 +25,7 @@ class AlumnoOut(BaseModel):
     apellido: str
     telefono: str | None = None
     email: str | None = None
+    activo: bool = True
 
 
 class InscripcionCreate(BaseModel):

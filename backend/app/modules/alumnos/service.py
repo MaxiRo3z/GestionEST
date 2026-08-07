@@ -2,6 +2,7 @@ import calendar
 from datetime import date
 
 from sqlalchemy.orm import Session
+from sqlalchemy import select  # NUEVO: Importamos select para la consulta
 
 from app.modules.alumnos.models import Alumno, Inscripcion
 from app.modules.alumnos.schemas import AlumnoCreate, InscripcionCreate
@@ -30,12 +31,26 @@ def crear_alumno(db: Session, data: AlumnoCreate) -> Alumno:
 def crear_inscripcion(db: Session, data: InscripcionCreate) -> Inscripcion:
     """
     Inscribe a un alumno en un curso:
-    1. Congela el valor de matrícula vigente al momento de inscribirse.
-    2. Genera el plan completo de cuotas (según duracion_meses del curso),
+    1. Valida que no esté inscripto previamente (salvo que ya haya finalizado).
+    2. Congela el valor de matrícula vigente al momento de inscribirse.
+    3. Genera el plan completo de cuotas (según duracion_meses del curso),
        cada una con el valor de cuota vigente en ese momento (congelado
        también, aunque puede actualizarse después vía ajuste de arancel
        mientras esté pendiente).
     """
+    
+    # --- NUEVA LÓGICA: Validar duplicidad ---
+    inscripcion_existente = db.scalar(
+        select(Inscripcion).where(
+            Inscripcion.alumno_id == data.alumno_id,
+            Inscripcion.curso_id == data.curso_id,
+            Inscripcion.estado != "finalizada"
+        )
+    )
+    if inscripcion_existente:
+        raise ValueError("El alumno ya se encuentra registrado en este curso. Solo puede reinscribirse si el periodo finalizó.")
+    # ----------------------------------------
+
     curso = db.get(Curso, data.curso_id)
     if not curso:
         raise ValueError("Curso no encontrado")

@@ -21,6 +21,7 @@ export interface Alumno {
   apellido: string;
   telefono: string | null;
   email: string | null;
+  activo?: boolean;
 }
 
 export interface Inscripcion {
@@ -31,6 +32,7 @@ export interface Inscripcion {
   matricula_pagada: boolean;
   valor_matricula_congelado: string;
   estado: string;
+  comprobante_id?: number
 }
 
 export interface Cuota {
@@ -41,6 +43,7 @@ export interface Cuota {
   valor_original: string;
   valor_actualizado: string;
   estado: "pendiente" | "pagada" | "vencida";
+  comprobante_id?: number
 }
 
 export interface MetodoPago {
@@ -149,4 +152,14 @@ export interface DashboardAlertas {
     total_matriculas_pendientes: number;
     total_liquidaciones_pendientes: number;
   };
+}
+
+export interface Comprobante {
+  id: number;
+  tipo: string;
+  referencia_id: number;
+  alumno_id?: number;
+  profesor_id?: number;
+  numero_comprobante: string;
+  creado_en: string;
 }

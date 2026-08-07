@@ -100,8 +100,9 @@ function CrearCursoModal({ open, onClose, onCreated }: { open: boolean; onClose:
 }
 
 function AjustarArancelModal({ curso, onClose, onDone }: { curso: Curso | null; onClose: () => void; onDone: () => void }) {
-  const [nuevoValor, setNuevoValor] = useState("");
-  const [motivo, setMotivo] = useState("Ajuste inflacionario");
+  const [nuevoValor, setNuevoValor] = useState(""); // Cuota
+  const [nuevoValorMatricula, setNuevoValorMatricula] = useState("");
+  const [motivo, setMotivo] = useState("Ajuste de arancel");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [resultado, setResultado] = useState<string | null>(null);
@@ -111,9 +112,24 @@ function AjustarArancelModal({ curso, onClose, onDone }: { curso: Curso | null; 
   const submit = async () => {
     setError(""); setSaving(true); setResultado(null);
     try {
-      const res = await CursosApi.ajustarArancel(curso.id, { nuevo_valor_cuota: nuevoValor, motivo });
-      setResultado(`Se actualizaron ${res.cuotas_actualizadas} cuotas pendientes. Las cuotas ya pagadas no se modificaron.`);
+      // Si el usuario no escribió una nueva cuota, usamos la cuota vigente actual
+      const cuotaFinal = nuevoValor.trim() !== "" 
+        ? nuevoValor 
+        : String(curso.precio_vigente?.valor_cuota || 0);
+
+      const payload: { nuevo_valor_cuota: string; motivo: string; nuevo_valor_matricula?: string } = {
+        nuevo_valor_cuota: cuotaFinal,
+        motivo,
+      };
+      
+      if (nuevoValorMatricula.trim() !== "") {
+        payload.nuevo_valor_matricula = nuevoValorMatricula;
+      }
+
+      const res = await CursosApi.ajustarArancel(curso.id, payload);
+      setResultado(`Se actualizaron ${res.cuotas_actualizadas} cuotas pendientes y las matrículas correspondientes.`);
       setNuevoValor("");
+      setNuevoValorMatricula("");
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -121,18 +137,47 @@ function AjustarArancelModal({ curso, onClose, onDone }: { curso: Curso | null; 
     }
   };
 
+  // Se habilita si está cargando, o si al menos uno de los dos campos tiene texto
+  const btnDeshabilitado = saving || (!nuevoValor.trim() && !nuevoValorMatricula.trim());
+
   return (
     <Modal open={!!curso} onClose={() => { onClose(); onDone(); }} title={`Ajustar arancel · ${curso.nombre}`}>
       <div className="space-y-4">
         {error && <ErrorBanner message={error} />}
         {resultado && <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm rounded-lg px-4 py-3">{resultado}</div>}
-        <p className="text-xs text-slate-500">
-          Valor actual de cuota: <strong>{curso.precio_vigente ? formatMoney(curso.precio_vigente.valor_cuota) : "-"}</strong>.
-          Este ajuste solo afecta cuotas pendientes o vencidas; las cuotas ya pagadas mantienen su valor histórico.
-        </p>
-        <Input label="Nuevo valor de cuota" type="number" step="0.01" value={nuevoValor} onChange={setNuevoValor} required />
-        <Input label="Motivo" value={motivo} onChange={setMotivo} />
-        <Button className="w-full" onClick={submit} disabled={saving || !nuevoValor}>
+        
+        <div className="bg-slate-50 p-3 rounded-lg text-sm text-slate-600 mb-2 border border-slate-100">
+          <p className="mb-1"><strong>Valores actuales:</strong></p>
+          <ul className="list-disc pl-5">
+            <li>Cuota: {curso.precio_vigente ? formatMoney(curso.precio_vigente.valor_cuota) : "-"}</li>
+            <li>Matrícula: {curso.precio_vigente ? formatMoney(curso.precio_vigente.valor_matricula) : "-"}</li>
+          </ul>
+          <p className="mt-2 text-xs text-slate-500">
+            Este ajuste afecta cuotas pendientes y matrículas no pagadas. Lo que ya está abonado mantiene su valor histórico.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          {/* Se quitó el "required" para permitir modificaciones parciales */}
+          <Input 
+            label="Nuevo valor cuota" 
+            type="number" 
+            step="0.01" 
+            value={nuevoValor} 
+            onChange={setNuevoValor} 
+          />
+          <Input 
+            label="Nuevo valor matrícula" 
+            type="number" 
+            step="0.01" 
+            value={nuevoValorMatricula} 
+            onChange={setNuevoValorMatricula}   
+          />
+        </div>
+        
+        <Input label="Motivo del ajuste" value={motivo} onChange={setMotivo} />
+        
+        <Button className="w-full" onClick={submit} disabled={btnDeshabilitado}>
           {saving ? "Aplicando..." : "Aplicar ajuste"}
         </Button>
       </div>

@@ -19,3 +19,4 @@ from app.modules.pagos.models import Cuota, AjustePrecio, MetodoPago, Pago  # no
 from app.modules.profesores.models import Profesor, AsistenciaProfesor, Liquidacion  # noqa: F401
 from app.modules.asistencias.models import AsistenciaAlumno  # noqa: F401
 from app.modules.gastos.models import Gasto  # noqa: F401
+from app.modules.comprobantes.models import Comprobante

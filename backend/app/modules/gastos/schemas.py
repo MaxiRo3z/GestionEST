@@ -9,7 +9,7 @@ class GastoCreate(BaseModel):
     monto: Decimal
     fecha: date
     recurrente: bool = False
-
+    gasto_padre_id: int | None = None
 
 class GastoOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -19,3 +19,4 @@ class GastoOut(BaseModel):
     monto: Decimal
     fecha: date
     recurrente: bool
+    gasto_padre_id: int | None = None

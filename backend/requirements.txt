@@ -9,3 +9,4 @@ python-multipart==0.0.32
 reportlab==5.0.0
 SQLAlchemy==2.0.51
 uvicorn==0.52.1
+fpdf2==2.8.7

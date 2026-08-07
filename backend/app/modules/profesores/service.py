@@ -8,6 +8,9 @@ from app.modules.profesores.models import Profesor, AsistenciaProfesor, Liquidac
 from app.modules.profesores.schemas import GenerarLiquidacionIn
 from app.events.bus import event_bus
 
+# Importamos el modelo Gasto
+from app.modules.gastos.models import Gasto
+
 
 def _redondear(valor: Decimal) -> Decimal:
     return valor.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
@@ -91,8 +94,29 @@ def marcar_liquidacion_pagada(db: Session, liquidacion_id: int) -> Liquidacion:
     liquidacion = db.get(Liquidacion, liquidacion_id)
     if not liquidacion:
         raise ValueError("Liquidación no encontrada")
+    
+    if liquidacion.pagado:
+        raise ValueError("Esta liquidación ya fue pagada anteriormente")
+        
+    # Obtenemos los datos del profesor para armar la descripción del gasto
+    profesor = db.get(Profesor, liquidacion.profesor_id)
+    
     liquidacion.pagado = True
     liquidacion.fecha_pago = date.today()
+    
+    # --- NUEVA LÓGICA: Creación automática del Gasto ---
+    descripcion_periodo = liquidacion.periodo.strftime("%m/%Y")
+    nuevo_gasto = Gasto(
+        categoria="Honorarios Profesores",
+        descripcion=f"Liquidación - {profesor.nombre} (Periodo: {descripcion_periodo})",
+        monto=liquidacion.valor_neto,
+        fecha=date.today(),
+        recurrente=False,
+        gasto_padre_id=None
+    )
+    db.add(nuevo_gasto)
+    # ---------------------------------------------------
+
     db.commit()
     db.refresh(liquidacion)
     return liquidacion

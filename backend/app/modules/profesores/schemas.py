@@ -54,3 +54,7 @@ class LiquidacionOut(BaseModel):
     valor_neto: Decimal
     pagado: bool
     fecha_pago: date | None = None
+
+class LiquidacionUpdate(BaseModel):
+    horas_totales: Decimal
+    descuentos: Decimal

@@ -1,6 +1,6 @@
 from datetime import date
 from decimal import Decimal
-from sqlalchemy import String, Boolean, Date, Numeric
+from sqlalchemy import String, Boolean, Date, Numeric, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.session import Base
@@ -15,3 +15,4 @@ class Gasto(Base):
     monto: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     fecha: Mapped[date] = mapped_column(Date, nullable=False)
     recurrente: Mapped[bool] = mapped_column(Boolean, default=False)
+    gasto_padre_id: Mapped[int | None] = mapped_column(ForeignKey("gastos.id"), nullable=True)

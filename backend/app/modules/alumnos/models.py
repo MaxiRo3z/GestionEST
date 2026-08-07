@@ -16,7 +16,8 @@ class Alumno(Base):
     telefono: Mapped[str | None] = mapped_column(String(30), nullable=True)
     email: Mapped[str | None] = mapped_column(String(150), nullable=True)
     creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-
+    activo = mapped_column(Boolean, default=True)
+    
     inscripciones: Mapped[list["Inscripcion"]] = relationship(back_populates="alumno")
 
 
