@@ -1,26 +1,29 @@
 import { useEffect, useState } from "react";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import { AlumnosApi, CursosApi, InscripcionesApi, AsistenciasAlumnosApi } from "../api/modules";
 import type { Alumno, Curso, Inscripcion, AsistenciaAlumno } from "../api/types";
-import { Card, CardHeader, Button, Select, Input, ErrorBanner, EmptyState, Badge } from "../components/ui";
+import { Card, CardHeader, Button, Select, Input, ErrorBanner, EmptyState } from "../components/ui";
 import { formatDate, todayISO } from "../lib/format";
 
 export default function AsistenciasPage() {
   const [alumnos, setAlumnos] = useState<Alumno[]>([]);
   const [inscripciones, setInscripciones] = useState<Inscripcion[]>([]);
   const [cursos, setCursos] = useState<Curso[]>([]);
-  
-  // Nuevos estados para filtrado por materia y fecha
+
+  // Filtrado por materia y fecha
   const [cursoSeleccionado, setCursoSeleccionado] = useState("");
   const [fecha, setFecha] = useState(todayISO());
-  
+
   // Estado local para los checkboxes del día: { [inscripcionId]: boolean }
   const [asistenciasDelDia, setAsistenciasDelDia] = useState<Record<number, boolean>>({});
-  
-  // Historial mensual para la tabla
+
+  // Historial completo, usado ahora solo para armar el PDF (ya no se renderiza como tabla)
   const [asistenciasMes, setAsistenciasMes] = useState<AsistenciaAlumno[]>([]);
-  
+
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [generandoPdf, setGenerandoPdf] = useState(false);
 
   useEffect(() => {
     Promise.all([AlumnosApi.listar(), InscripcionesApi.listar(), CursosApi.listar()])
@@ -28,10 +31,8 @@ export default function AsistenciasPage() {
       .catch((e) => setError(e.message));
   }, []);
 
-  // Inscripciones correspondientes al curso seleccionado
   const inscripcionesDelCurso = inscripciones.filter(i => i.curso_id === Number(cursoSeleccionado));
 
-  // Cargar asistencias existentes al cambiar de curso o de fecha
   useEffect(() => {
     if (!cursoSeleccionado) {
       setAsistenciasDelDia({});
@@ -39,23 +40,19 @@ export default function AsistenciasPage() {
       return;
     }
 
-    // Inicializamos por defecto todos como presentes (true) para el manejo de checkboxes
     const estadoInicial: Record<number, boolean> = {};
     inscripcionesDelCurso.forEach(ins => {
-      estadoInicial[ins.id] = true; // Por defecto presente si no se toca
+      estadoInicial[ins.id] = true;
     });
 
-    // Buscamos los registros guardados para esta fecha y curso
     const cargarDatosFecha = async () => {
       try {
-        // Traemos las asistencias de las inscripciones de este curso
         const promesas = inscripcionesDelCurso.map(ins => AsistenciasAlumnosApi.listar(ins.id));
         const resultados = await Promise.all(promesas);
         const todasLasAsistencias = resultados.flat();
-        
+
         setAsistenciasMes(todasLasAsistencias);
 
-        // Filtramos las que corresponden estrictamente a la fecha actual seleccionada
         const mapDia: Record<number, boolean> = { ...estadoInicial };
         todasLasAsistencias.forEach(a => {
           if (a.fecha === fecha) {
@@ -71,7 +68,6 @@ export default function AsistenciasPage() {
     cargarDatosFecha();
   }, [cursoSeleccionado, fecha]);
 
-  // Manejo de cambio de fecha con autoguardado de la fecha anterior
   const handleFechaChange = async (nuevaFecha: string) => {
     if (!cursoSeleccionado || nuevaFecha === fecha) {
       setFecha(nuevaFecha);
@@ -81,18 +77,17 @@ export default function AsistenciasPage() {
     setSaving(true);
     setError("");
     try {
-      // Guardar automáticamente la fecha anterior con el estado actual (los no marcados se van como true/presente)
       const promesasGuardado = inscripcionesDelCurso.map(ins => {
         const estadoPresente = asistenciasDelDia[ins.id] ?? true;
         return AsistenciasAlumnosApi.cargar({
           inscripcion_id: ins.id,
-          fecha: fecha, // Fecha vieja
+          fecha: fecha,
           presente: estadoPresente
         });
       });
 
       await Promise.all(promesasGuardado);
-      setFecha(nuevaFecha); // Actualizamos a la nueva fecha
+      setFecha(nuevaFecha);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -113,12 +108,12 @@ export default function AsistenciasPage() {
         });
       });
       await Promise.all(promesas);
-      
-      // Recargar historial mensual
+
+      // Recargar historial (para que el PDF salga actualizado si se genera después)
       const promesasMes = inscripcionesDelCurso.map(ins => AsistenciasAlumnosApi.listar(ins.id));
       const resultados = await Promise.all(promesasMes);
       setAsistenciasMes(resultados.flat());
-      
+
       alert("Asistencias guardadas correctamente");
     } catch (e) {
       setError((e as Error).message);
@@ -132,20 +127,87 @@ export default function AsistenciasPage() {
     return al ? `${al.nombre} ${al.apellido}` : "Desconocido";
   };
 
-  // Construir matriz para la tabla mensual
-  // Fechas únicas del mes y alumnos del curso
   const fechasUnicas = Array.from(new Set(asistenciasMes.map(a => a.fecha))).sort();
+
+  const generarPdf = () => {
+    if (!cursoSeleccionado || fechasUnicas.length === 0) return;
+    setGenerandoPdf(true);
+    try {
+      const cursoNombre = cursos.find(c => c.id === Number(cursoSeleccionado))?.nombre ?? "Curso";
+      const doc = new jsPDF({ orientation: "landscape" });
+
+      doc.setFontSize(14);
+      doc.text(`Asistencias - ${cursoNombre}`, 14, 15);
+      doc.setFontSize(10);
+      doc.text(`Generado el ${formatDate(todayISO())}`, 14, 21);
+
+      const head = [["Alumno", ...fechasUnicas.map(f => formatDate(f))]];
+
+      // Usamos "P"/"A" como valor crudo (para la lógica), pero el texto no se
+      // dibuja: el tilde y la cruz se pintan a mano con líneas vectoriales en
+      // didDrawCell, evitando el glifo "✓" que la fuente por defecto de jsPDF
+      // no renderiza bien.
+      const body = inscripcionesDelCurso.map(ins => {
+        const fila = [getNombreAlumno(ins.alumno_id)];
+        fechasUnicas.forEach(f => {
+          const registro = asistenciasMes.find(a => a.inscripcion_id === ins.id && a.fecha === f);
+          const presente = registro ? registro.presente : true;
+          fila.push(presente ? "P" : "A");
+        });
+        return fila;
+      });
+
+      autoTable(doc, {
+        head,
+        body,
+        startY: 27,
+        styles: { fontSize: 9, halign: "center", minCellHeight: 8 },
+        headStyles: { fillColor: [30, 41, 59] },
+        columnStyles: { 0: { halign: "left", fontStyle: "bold" } },
+        didParseCell: (data) => {
+          // Oculta el texto crudo "P"/"A" en las columnas de fecha; el nombre (columna 0) queda intacto
+          if (data.section === "body" && data.column.index > 0) {
+            data.cell.text = [];
+          }
+        },
+        didDrawCell: (data) => {
+          if (data.section !== "body" || data.column.index === 0) return;
+
+          const presente = data.cell.raw === "P";
+          const cx = data.cell.x + data.cell.width / 2;
+          const cy = data.cell.y + data.cell.height / 2;
+
+          if (presente) {
+            doc.setDrawColor(16, 185, 129);
+            doc.setLineWidth(0.7);
+            doc.line(cx - 2.2, cy + 0.2, cx - 0.5, cy + 2.2);
+            doc.line(cx - 0.5, cy + 2.2, cx + 2.6, cy - 2.4);
+          } else {
+            doc.setDrawColor(225, 29, 72);
+            doc.setLineWidth(0.7);
+            doc.line(cx - 2, cy - 2, cx + 2, cy + 2);
+            doc.line(cx - 2, cy + 2, cx + 2, cy - 2);
+          }
+        },
+      });
+
+      doc.save(`asistencias_${cursoNombre.replace(/\s+/g, "_")}.pdf`);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setGenerandoPdf(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-slate-900">Control de Asistencias por Materia</h2>
-        <p className="text-slate-500 text-sm mt-1">Seleccioná una materia para registrar asistencias por lote o ver el resumen mensual.</p>
+        <p className="text-slate-500 text-sm mt-1">Seleccioná una materia para registrar asistencias por lote o exportar el resumen en PDF.</p>
       </div>
 
       {error && <ErrorBanner message={error} />}
 
-      {/* Selectores de Materia y Fecha */}
       <Card className="p-5 space-y-4">
         <Select
           label="Seleccionar Materia (Curso)"
@@ -158,20 +220,26 @@ export default function AsistenciasPage() {
 
         {cursoSeleccionado && (
           <div className="flex items-end gap-3 pt-2 border-t border-slate-100">
-            <Input 
-              label="Fecha de clase" 
-              type="date" 
-              value={fecha} 
-              onChange={handleFechaChange} 
+            <Input
+              label="Fecha de clase"
+              type="date"
+              value={fecha}
+              onChange={handleFechaChange}
             />
             <Button onClick={guardarCambiosDia} disabled={saving}>
               {saving ? "Guardando..." : "Guardar Asistencias del Día"}
+            </Button>
+            <Button
+              onClick={generarPdf}
+              disabled={generandoPdf || fechasUnicas.length === 0}
+              variant="secondary"
+            >
+              {generandoPdf ? "Generando..." : "Exportar PDF"}
             </Button>
           </div>
         )}
       </Card>
 
-      {/* Lista de Alumnos con Checkbox para el día seleccionado */}
       {cursoSeleccionado && (
         <Card>
           <CardHeader title={`Alumnos Inscriptos - Clase del ${formatDate(fecha)}`} />
@@ -183,8 +251,8 @@ export default function AsistenciasPage() {
                 <div key={ins.id} className="px-5 py-3 flex items-center justify-between text-sm hover:bg-slate-50">
                   <span className="font-medium text-slate-800">{getNombreAlumno(ins.alumno_id)}</span>
                   <label className="flex items-center gap-2 cursor-pointer">
-                    <input 
-                      type="checkbox" 
+                    <input
+                      type="checkbox"
                       className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
                       checked={isPresente}
                       onChange={(e) => {
@@ -201,45 +269,6 @@ export default function AsistenciasPage() {
                 </div>
               );
             })}
-          </div>
-        </Card>
-      )}
-
-      {/* Tabla de Muestra Mensual */}
-      {cursoSeleccionado && fechasUnicas.length > 0 && (
-        <Card className="overflow-hidden">
-          <CardHeader title="Muestra Mensual de Asistencias" />
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm text-slate-600">
-              <thead className="bg-slate-50 text-slate-700 uppercase text-xs border-b border-slate-200">
-                <tr>
-                  <th className="px-5 py-3">Alumno</th>
-                  {fechasUnicas.map(f => (
-                    <th key={f} className="px-3 py-3 text-center">{formatDate(f)}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {inscripcionesDelCurso.map(ins => (
-                  <tr key={ins.id} className="hover:bg-slate-50">
-                    <td className="px-5 py-3 font-medium text-slate-800 whitespace-nowrap">
-                      {getNombreAlumno(ins.alumno_id)}
-                    </td>
-                    {fechasUnicas.map(f => {
-                      const registro = asistenciasMes.find(a => a.inscripcion_id === ins.id && a.fecha === f);
-                      const estado = registro ? registro.presente : true; // por defecto presente si no hay registro
-                      return (
-                        <td key={f} className="px-3 py-3 text-center">
-                          <span className={`inline-block px-2 py-1 rounded text-xs font-semibold ${estado ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
-                            {estado ? "P" : "A"}
-                          </span>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </div>
         </Card>
       )}

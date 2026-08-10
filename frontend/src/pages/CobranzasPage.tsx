@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { AlumnosApi, CursosApi, InscripcionesApi, PagosApi } from "../api/modules";
 import type { Alumno, Curso, Inscripcion, Cuota, MetodoPago } from "../api/types";
-import { Card, CardHeader, Button, Select, Input, Modal, ErrorBanner, Badge, EmptyState } from "../components/ui";
+import { Card, Button, Select, Input, Modal, ErrorBanner, Badge, EmptyState } from "../components/ui";
 import { formatMoney, formatDate } from "../lib/format";
 
 export default function CobranzasPage() {

@@ -64,6 +64,7 @@ export interface Pago {
   fecha_pago: string;
   comprobante_nro: string | null;
   tipo: "cuota" | "matricula";
+  comprobante_id: number | null;
 }
 
 export interface Profesor {

@@ -1,0 +1,29 @@
+# Blueprint de Render — define el servicio del backend como código.
+# Con esto, Render puede crear el Web Service automáticamente leyendo
+# este archivo (Dashboard > New > Blueprint), sin configurar nada a mano.
+#
+# La base de datos NO se define acá a propósito: usamos Neon (externo)
+# en vez del Postgres de Render, para evitar la expiración a 30 días
+# del plan free de Render Postgres.
+
+services:
+  - type: web
+    name: instituto-erp-backend
+    runtime: python
+    plan: free
+    region: oregon
+    branch: main
+    rootDir: backend
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: DATABASE_URL
+        sync: false   # se carga a mano en el dashboard (viene de Neon)
+      - key: APP_NAME
+        value: "Instituto ERP"
+      - key: ENV
+        value: "production"
+      - key: CORS_ORIGINS
+        sync: false   # se carga a mano: URL del frontend en Cloudflare Pages
+      - key: PYTHON_VERSION
+        value: "3.11.9"

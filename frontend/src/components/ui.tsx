@@ -18,13 +18,16 @@ export function CardHeader({ title, action }: { title: string; action?: ReactNod
 }
 
 // Ampliados los tonos del Badge para incluir tu paleta, usando opacidades para los fondos
-export function Badge({ children, tone = "gold" }: { children: ReactNode; tone?: "gold" | "terra" | "gray" | "green" | "red" }) {
+export function Badge({ children, tone = "gold" }: { children: ReactNode; tone?: "gold" | "terra" | "gray" | "green" | "red" | "amber" | "blue" | "slate" }) {
   const tones: Record<string, string> = {
     gold: "bg-brand-gold-light/20 text-brand-gold-dark",
     terra: "bg-brand-terra-light/20 text-brand-terra-dark",
     gray: "bg-slate-100 text-brand-gray-dark",
     green: "bg-emerald-100 text-emerald-700",
     red: "bg-rose-100 text-rose-700",
+    amber: "bg-amber-100 text-amber-700",
+    blue: "bg-blue-100 text-blue-700",
+    slate: "bg-slate-200 text-slate-700",
   };
   return <span className={`inline-flex items-center text-xs font-bold px-2.5 py-1 rounded-full ${tones[tone]}`}>{children}</span>;
 }
@@ -55,10 +58,10 @@ export function Button({
 
 // Inputs y Selects ahora enfocan con anillos color Dorado
 export function Input({
-  label, value, onChange, type = "text", placeholder, required, step,
+  label, value, onChange, type = "text", placeholder, required, step, disabled,
 }: {
   label: string; value: string; onChange: (v: string) => void; type?: string;
-  placeholder?: string; required?: boolean; step?: string;
+  placeholder?: string; required?: boolean; step?: string; disabled?: boolean;
 }) {
   return (
     <label className="block text-sm">
@@ -67,29 +70,31 @@ export function Input({
         type={type}
         step={step}
         required={required}
+        disabled={disabled}
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-brand-gray-dark placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-gold focus:border-brand-gold transition-shadow"
+        className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-brand-gray-dark placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-gold focus:border-brand-gold transition-shadow disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
       />
     </label>
   );
 }
 
 export function Select({
-  label, value, onChange, options, required,
+  label, value, onChange, options, required, disabled,
 }: {
   label: string; value: string; onChange: (v: string) => void;
-  options: { value: string; label: string }[]; required?: boolean;
+  options: { value: string; label: string }[]; required?: boolean; disabled?: boolean;
 }) {
   return (
     <label className="block text-sm">
       <span className="text-brand-gray-dark font-semibold">{label}</span>
       <select
         required={required}
+        disabled={disabled}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm bg-white text-brand-gray-dark focus:outline-none focus:ring-2 focus:ring-brand-gold focus:border-brand-gold transition-shadow"
+        className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm bg-white text-brand-gray-dark focus:outline-none focus:ring-2 focus:ring-brand-gold focus:border-brand-gold transition-shadow disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
       >
         <option value="">Seleccionar...</option>
         {options.map((o) => (
