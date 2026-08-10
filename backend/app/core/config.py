@@ -14,7 +14,15 @@ class Settings(BaseSettings):
     )
     APP_NAME: str = "Instituto ERP"
     ENV: str = "local"
-    CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
+
+    # En local acepta el default de abajo. En producción (Render), se define
+    # como variable de entorno CORS_ORIGINS con dominios separados por coma,
+    # ej: "https://instituto-erp.pages.dev,https://miinstituto.com.ar"
+    CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
 
 
 settings = Settings()

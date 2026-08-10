@@ -1,7 +1,11 @@
 import logging
+import sys
+from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s: %(message)s")
 
@@ -24,7 +28,7 @@ app = FastAPI(title=settings.APP_NAME)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -40,6 +44,38 @@ app.include_router(gastos_router)
 app.include_router(dashboard_router)
 app.include_router(comprobantes_router)
 
+
 @app.get("/health")
 def health():
     return {"status": "ok", "app": settings.APP_NAME, "env": settings.ENV}
+
+
+# --- Servir el frontend ya compilado (npm run build) desde el mismo proceso/puerto ---
+#
+# resource_path() resuelve la carpeta correcta tanto corriendo con
+# "uvicorn app.main:app" en desarrollo, como empaquetado con PyInstaller
+# (donde los archivos van a sys._MEIPASS en tiempo de ejecución).
+def resource_path(relative: str) -> Path:
+    if getattr(sys, "frozen", False):
+        base = Path(sys._MEIPASS)  # type: ignore[attr-defined]
+    else:
+        base = Path(__file__).resolve().parent.parent  # carpeta backend/
+    return base / relative
+
+
+frontend_dist = resource_path("frontend_dist")
+
+if frontend_dist.exists():
+    # Sirve JS/CSS/imágenes con su hash de nombre bajo /assets
+    app.mount("/assets", StaticFiles(directory=frontend_dist / "assets"), name="assets")
+
+    # Cualquier ruta que NO empiece con /api, /health, /docs, /openapi.json
+    # devuelve index.html, para que react-router-dom maneje el ruteo en el cliente.
+    @app.get("/{full_path:path}")
+    def spa_catch_all(request: Request, full_path: str):
+        index_file = frontend_dist / "index.html"
+        return FileResponse(index_file)
+else:
+    logging.getLogger("app.main").warning(
+        "No se encontró frontend_dist — corriendo solo como API (modo desarrollo)."
+    )

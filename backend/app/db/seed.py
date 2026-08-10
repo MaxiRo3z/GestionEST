@@ -12,8 +12,8 @@ from app.modules.pagos.models import MetodoPago
 METODOS_DEFAULT = [
     {"nombre": "Efectivo", "recargo_pct": 0, "cuotas_max": None},
     {"nombre": "Transferencia bancaria", "recargo_pct": 0, "cuotas_max": None},
-    {"nombre": "Tarjeta de Débito", "recargo_pct": 5, "cuotas_max": None},
-    {"nombre": "Tarjeta de Crédito", "recargo_pct": 15, "cuotas_max": 3},
+    {"nombre": "Tarjeta de Débito", "recargo_pct": 0, "cuotas_max": None},
+    {"nombre": "Tarjeta de Crédito", "recargo_pct": 0, "cuotas_max": 0},
 ]
 
 
