@@ -3,9 +3,11 @@ import sys
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s: %(message)s")
 
@@ -18,6 +20,7 @@ from app.modules.notificaciones import listeners  # noqa: F401
 
 from app.modules.auth.deps import get_current_user
 from app.modules.auth.router import router as auth_router
+from app.modules.auth.service import rol_desde_header
 from app.modules.cursos.router import router as cursos_router
 from app.modules.alumnos.router import router as alumnos_router, inscripciones_router
 from app.modules.pagos.router import router as pagos_router
@@ -36,6 +39,60 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+_error_logger = logging.getLogger("app.errores")
+
+# --- Mensajes de error diferenciados por rol ---
+#
+# Los HTTPException que ya lanza el código de negocio (ej: "Esta cuota ya
+# está pagada") quedan tal cual para ambos roles -- ya están redactados para
+# un usuario final. Estos dos handlers globales solo cubren las dos
+# categorías de error que por defecto salen "técnicas": 422 (validación de
+# Pydantic) y 500 (excepción no manejada). Para rol "admin" (Maxi, debugueando)
+# se muestra el detalle técnico completo; para rol "cliente" (el instituto,
+# sin conocimientos técnicos) se muestra un mensaje genérico y accionable.
+# El rol se obtiene del propio JWT (rol_desde_header), no de una dependencia,
+# porque un exception handler global corre fuera del árbol normal de Depends.
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    rol = rol_desde_header(request.headers.get("authorization"))
+    if rol == "admin":
+        return JSONResponse(status_code=422, content={"detail": exc.errors()})
+    return JSONResponse(
+        status_code=422,
+        content={"detail": "Revisá los datos ingresados: algún campo está vacío o tiene un formato incorrecto."},
+    )
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    # Las HTTPException explícitas del código de negocio (400/401/403/404,
+    # etc.) ya traen un mensaje pensado para el usuario final -- se devuelven
+    # sin modificar, para ambos roles.
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+        headers=getattr(exc, "headers", None) or {},
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    # Siempre se loguea el detalle completo del lado del servidor (logs de
+    # Render), sin importar el rol de quien hizo el request -- así Maxi puede
+    # revisar el traceback aunque el error lo haya disparado el instituto.
+    _error_logger.exception("Error no manejado en %s %s", request.method, request.url.path)
+    rol = rol_desde_header(request.headers.get("authorization"))
+    if rol == "admin":
+        return JSONResponse(status_code=500, content={"detail": f"{type(exc).__name__}: {exc}"})
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "Ocurrió un error inesperado. Probá de nuevo en un momento. "
+            "Si el problema persiste, contactá al soporte técnico."
+        },
+    )
+
 
 # /api/auth/* queda público (necesita estarlo para poder loguearse). Todo lo
 # demás requiere un JWT válido: se protege acá, centralizado, en vez de

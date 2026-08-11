@@ -106,3 +106,26 @@ def auth_headers(client, usuario_test):
     assert res.status_code == 200, res.text
     token = res.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+def usuario_cliente(db):
+    usuario = Usuario(
+        username="test_cliente",
+        password_hash=hash_password("clave-cliente-123"),
+        rol="cliente",
+    )
+    db.add(usuario)
+    db.commit()
+    db.refresh(usuario)
+    return usuario
+
+
+@pytest.fixture
+def auth_headers_cliente(client, usuario_cliente):
+    """Igual que auth_headers, pero logueado como el usuario rol 'cliente'
+    (mismo control completo, pero ve errores no técnicos)."""
+    res = client.post("/api/auth/login", json={"username": "test_cliente", "password": "clave-cliente-123"})
+    assert res.status_code == 200, res.text
+    token = res.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}

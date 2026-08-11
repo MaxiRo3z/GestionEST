@@ -37,8 +37,15 @@ services:
       # --- Autenticación (nuevo) ---
       - key: JWT_SECRET_KEY
         sync: false   # OBLIGATORIO: generar un valor propio y secreto en el dashboard,
-                       # nunca dejar el default del código en producción.
+                      # nunca dejar el default del código en producción.
       - key: ADMIN_USERNAME
-        sync: false   # usuario del admin que crea el seed la primera vez
+        sync: false   # usuario del admin que crea el seed la primera vez (rol admin: ve el detalle técnico de los errores)
       - key: ADMIN_PASSWORD
         sync: false   # contraseña inicial; cambiarla desde la app después del primer login
+      # Usuario del cliente/instituto: mismo control completo del sistema,
+      # pero rol "cliente" -> ve mensajes de error genéricos, no el detalle
+      # técnico. Opcional: si se dejan sin definir, el seed no lo crea.
+      - key: CLIENTE_USERNAME
+        sync: false
+      - key: CLIENTE_PASSWORD
+        sync: false

@@ -36,3 +36,12 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     return usuario
+
+
+def require_admin(usuario: Usuario = Depends(get_current_user)) -> Usuario:
+    """Para las pocas acciones que sí distinguen por rol (hoy: administrar
+    usuarios). El resto del sistema es de control completo para cualquier
+    usuario logueado, sea admin o cliente."""
+    if usuario.rol != "admin":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Esta acción requiere un usuario administrador.")
+    return usuario

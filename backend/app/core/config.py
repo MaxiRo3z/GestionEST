@@ -36,8 +36,16 @@ class Settings(BaseSettings):
     # Credenciales del usuario administrador que se crea solo si la tabla
     # "usuarios" está vacía (ver app/db/seed.py). Cambiar la contraseña desde
     # la propia app (POST /api/auth/cambiar-password) después del primer login.
+    # rol "admin": ve el detalle técnico completo de los errores.
     ADMIN_USERNAME: str = "admin"
     ADMIN_PASSWORD: str = "instituto2026"
+
+    # Usuario del cliente/instituto: mismo control completo del sistema que
+    # el admin, pero con rol "cliente" -> ante un error inesperado ve un
+    # mensaje genérico en vez del detalle técnico (ver app/main.py). Opcional:
+    # si se dejan vacíos, el seed simplemente no lo crea.
+    CLIENTE_USERNAME: str = ""
+    CLIENTE_PASSWORD: str = ""
 
     @property
     def cors_origins_list(self) -> list[str]:

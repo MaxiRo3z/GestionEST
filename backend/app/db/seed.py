@@ -53,12 +53,36 @@ def _seed_admin(db) -> None:
     )
 
 
+def _seed_cliente(db) -> None:
+    """Crea el usuario del cliente/instituto (rol "cliente": mismo control
+    completo que el admin, pero ve mensajes de error genéricos en vez del
+    detalle técnico). Solo corre si CLIENTE_USERNAME/CLIENTE_PASSWORD están
+    configurados en .env, y solo si ese username todavía no existe (no pisa
+    una contraseña ya cambiada)."""
+    if not settings.CLIENTE_USERNAME or not settings.CLIENTE_PASSWORD:
+        return
+    existe = db.scalar(select(Usuario).where(Usuario.username == settings.CLIENTE_USERNAME))
+    if existe:
+        return
+    db.add(Usuario(
+        username=settings.CLIENTE_USERNAME,
+        password_hash=hash_password(settings.CLIENTE_PASSWORD),
+        rol="cliente",
+    ))
+    db.commit()
+    logger.warning(
+        "Se creó el usuario cliente '%s' con la contraseña inicial de .env.",
+        settings.CLIENTE_USERNAME,
+    )
+
+
 def run():
     db = SessionLocal()
     try:
         _seed_metodos_pago(db)
         _seed_admin(db)
-        print("Seed inicial completado (métodos de pago, usuario administrador).")
+        _seed_cliente(db)
+        print("Seed inicial completado (métodos de pago, usuarios).")
     finally:
         db.close()
 
