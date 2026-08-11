@@ -1,5 +1,4 @@
-import calendar
-from datetime import date, timedelta
+from datetime import date
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -9,17 +8,10 @@ from sqlalchemy import select, func
 from app.db.session import get_db
 from app.modules.gastos.models import Gasto
 from app.modules.gastos.schemas import GastoCreate, GastoOut
+from app.modules.gastos.service import sumar_meses
 from app.modules.pagos.models import Pago
 
 router = APIRouter(prefix="/api/gastos", tags=["Gastos y Caja"])
-
-# --- FUNCIÓN AUXILIAR PARA SUMAR MESES ---
-def sumar_meses(fecha_origen: date, cantidad_meses: int) -> date:
-    mes = fecha_origen.month - 1 + cantidad_meses
-    anio = fecha_origen.year + (mes // 12)
-    mes = (mes % 12) + 1
-    dia = min(fecha_origen.day, calendar.monthrange(anio, mes)[1])
-    return date(anio, mes, dia)
 
 
 @router.get("", response_model=list[GastoOut])

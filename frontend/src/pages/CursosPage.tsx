@@ -1,18 +1,14 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { CursosApi } from "../api/modules";
 import type { Curso } from "../api/types";
 import { Card, Button, Input, Modal, ErrorBanner, Badge } from "../components/ui";
 import { formatMoney } from "../lib/format";
+import { useApiList } from "../lib/useApi";
 
 export default function CursosPage() {
-  const [cursos, setCursos] = useState<Curso[]>([]);
-  const [error, setError] = useState("");
+  const { data: cursos, error, reload: cargar } = useApiList<Curso>(() => CursosApi.listar(), []);
   const [showCreate, setShowCreate] = useState(false);
   const [ajusteTarget, setAjusteTarget] = useState<Curso | null>(null);
-
-  const cargar = () => CursosApi.listar().then(setCursos).catch((e) => setError(e.message));
-
-  useEffect(() => { cargar(); }, []);
 
   return (
     <div className="space-y-6">

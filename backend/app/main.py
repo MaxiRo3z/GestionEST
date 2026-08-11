@@ -2,7 +2,7 @@ import logging
 import sys
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -10,11 +10,14 @@ from fastapi.staticfiles import StaticFiles
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s: %(message)s")
 
 from app.core.config import settings
+from app.core.scheduler import detener_scheduler, iniciar_scheduler
 from app.db.base import Base  # noqa: F401  (registra todos los modelos)
 
 # Importar listeners registra los @event_bus.on(...) al arrancar el proceso
 from app.modules.notificaciones import listeners  # noqa: F401
 
+from app.modules.auth.deps import get_current_user
+from app.modules.auth.router import router as auth_router
 from app.modules.cursos.router import router as cursos_router
 from app.modules.alumnos.router import router as alumnos_router, inscripciones_router
 from app.modules.pagos.router import router as pagos_router
@@ -34,15 +37,34 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(cursos_router)
-app.include_router(alumnos_router)
-app.include_router(inscripciones_router)
-app.include_router(pagos_router)
-app.include_router(profesores_router)
-app.include_router(asistencias_alumnos_router)
-app.include_router(gastos_router)
-app.include_router(dashboard_router)
-app.include_router(comprobantes_router)
+# /api/auth/* queda público (necesita estarlo para poder loguearse). Todo lo
+# demás requiere un JWT válido: se protege acá, centralizado, en vez de
+# tocar cada router individual -- así ningún endpoint nuevo puede quedar
+# desprotegido por olvido.
+_auth_dep = [Depends(get_current_user)]
+
+app.include_router(auth_router)
+app.include_router(cursos_router, dependencies=_auth_dep)
+app.include_router(alumnos_router, dependencies=_auth_dep)
+app.include_router(inscripciones_router, dependencies=_auth_dep)
+app.include_router(pagos_router, dependencies=_auth_dep)
+app.include_router(profesores_router, dependencies=_auth_dep)
+app.include_router(asistencias_alumnos_router, dependencies=_auth_dep)
+app.include_router(gastos_router, dependencies=_auth_dep)
+app.include_router(dashboard_router, dependencies=_auth_dep)
+app.include_router(comprobantes_router, dependencies=_auth_dep)
+
+
+@app.on_event("startup")
+def _on_startup():
+    # ENV=test evita que el scheduler arranque durante los tests automatizados.
+    if settings.ENV != "test":
+        iniciar_scheduler()
+
+
+@app.on_event("shutdown")
+def _on_shutdown():
+    detener_scheduler()
 
 
 @app.get("/health")

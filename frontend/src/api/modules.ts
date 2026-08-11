@@ -18,7 +18,16 @@ export const CursosApi = {
 
 // ---- Alumnos ----
 export const AlumnosApi = {
+  // Sin argumentos trae la lista completa (la usan otras pantallas, como
+  // Cobranzas, para resolver nombres por id sin tener que paginar).
   listar: () => api.get<Alumno[]>("/api/alumnos"),
+  // Con {limit, offset} pagina de verdad: devuelve la página pedida más el
+  // total real (para armar "página X de Y"), usado por AlumnosPage.
+  listarPaginado: (limit: number, offset: number, activo?: boolean) => {
+    const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (activo !== undefined) qs.set("activo", String(activo));
+    return api.getWithTotal<Alumno[]>(`/api/alumnos?${qs}`);
+  },
   crear: (data: { dni: string; nombre: string; apellido: string; telefono?: string; email?: string }) =>
     api.post<Alumno>("/api/alumnos", data),
   modificar: (id: number, data: { dni: string; nombre: string; apellido: string; telefono?: string; email?: string }) =>
@@ -50,6 +59,8 @@ export const PagosApi = {
   pagarMatricula: (data: { inscripcion_id: number; metodo_pago_id: number; comprobante_nro?: string }) =>
     api.post<Pago>("/api/pagos/matricula/pagar", data),
   listarPagos: () => api.get<Pago[]>("/api/pagos"),
+  listarPagosPaginado: (limit: number, offset: number) =>
+    api.getWithTotal<Pago[]>(`/api/pagos?limit=${limit}&offset=${offset}`),
   marcarVencidas: () => api.post<{ cuotas_marcadas_vencidas: number }>("/api/pagos/marcar-vencidas"),
 };
 
@@ -62,8 +73,15 @@ export const ProfesoresApi = {
     profesor_id: number; curso_id: number; fecha: string;
     horas_asignadas: string; horas_trabajadas: string; observacion?: string;
   }) => api.post<AsistenciaProfesor>("/api/profesores/asistencias", data),
-  listarAsistencias: (profesorId?: number) =>
-    api.get<AsistenciaProfesor[]>(`/api/profesores/asistencias${profesorId ? `?profesor_id=${profesorId}` : ""}`),
+  editarAsistencia: (id: number, data: { horas_asignadas: string; horas_trabajadas: string; observacion?: string }) =>
+    api.put<AsistenciaProfesor>(`/api/profesores/asistencias/${id}`, data),
+  listarAsistencias: (params?: { profesorId?: number; fecha?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.profesorId) qs.set("profesor_id", String(params.profesorId));
+    if (params?.fecha) qs.set("fecha", params.fecha);
+    const suffix = qs.toString() ? `?${qs}` : "";
+    return api.get<AsistenciaProfesor[]>(`/api/profesores/asistencias${suffix}`);
+  },
   generarLiquidacion: (data: { profesor_id: number; periodo: string }) =>
     api.post<Liquidacion>("/api/profesores/liquidaciones/generar", data),
   listarLiquidaciones: (profesorId?: number) =>
@@ -98,10 +116,15 @@ export const GastosApi = {
 
 // ---- Dashboard ----
 export const DashboardApi = {
-  alertas: (diasProximos = 7) => api.get<DashboardAlertas>(`/api/dashboard/alertas?dias_proximos=${diasProximos}`),
+  alertas: (diasProximos = 7, cursoId?: number) => {
+    const qs = new URLSearchParams({ dias_proximos: String(diasProximos) });
+    if (cursoId) qs.set("curso_id", String(cursoId));
+    return api.get<DashboardAlertas>(`/api/dashboard/alertas?${qs}`);
+  },
 };
 
+// Los comprobantes hoy solo se emiten para alumnos (cuota / matrícula); el
+// recibo de liquidación docente no se entrega a los profesores por el momento.
 export const ComprobantesApi = {
   listarPorAlumno: (alumnoId: number) => api.get<Comprobante[]>(`/api/comprobantes/alumno/${alumnoId}`),
-  listarPorProfesor: (profesorId: number) => api.get<Comprobante[]>(`/api/comprobantes/profesor/${profesorId}`),
 };

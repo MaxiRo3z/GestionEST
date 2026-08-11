@@ -160,7 +160,6 @@ export interface Comprobante {
   tipo: string;
   referencia_id: number;
   alumno_id?: number;
-  profesor_id?: number;
   numero_comprobante: string;
   creado_en: string;
 }

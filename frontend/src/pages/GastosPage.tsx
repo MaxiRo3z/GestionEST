@@ -3,6 +3,7 @@ import { GastosApi } from "../api/modules";
 import type { Gasto, Balance } from "../api/types";
 import { Card, CardHeader, Button, Input, Select, Modal, ErrorBanner, Badge, EmptyState } from "../components/ui";
 import { formatMoney, formatDate, todayISO } from "../lib/format";
+import { useApi } from "../lib/useApi";
 
 const CATEGORIAS = [
   { value: "alquiler", label: "Alquiler" },
@@ -13,39 +14,36 @@ const CATEGORIAS = [
 ];
 
 export default function GastosPage() {
-  const [gastos, setGastos] = useState<Gasto[]>([]);
-  const [balance, setBalance] = useState<Balance | null>(null);
-  const [error, setError] = useState("");
-  
-  const [showCreate, setShowCreate] = useState(false);
-  const [gastoAEditar, setGastoAEditar] = useState<Gasto | null>(null);
-
   const hoy = new Date();
   const [anio, setAnio] = useState(hoy.getFullYear());
   const [mes, setMes] = useState(hoy.getMonth() + 1);
 
-  const cargarDatos = () => {
-    GastosApi.listar(anio, mes).then(setGastos).catch((e) => setError(e.message));
-    GastosApi.balance(anio, mes).then(setBalance).catch((e) => setError(e.message));
-  };
+  const [showCreate, setShowCreate] = useState(false);
+  const [gastoAEditar, setGastoAEditar] = useState<Gasto | null>(null);
 
-  // Se recarga automáticamente al cambiar el mes o el año
-  useEffect(() => {
-    cargarDatos();
-  }, [anio, mes]);
+  const {
+    data: { gastos, balance }, error, reload: cargarDatos,
+  } = useApi(
+    async () => {
+      const [gastos, balance] = await Promise.all([GastosApi.listar(anio, mes), GastosApi.balance(anio, mes)]);
+      return { gastos, balance };
+    },
+    [anio, mes],
+    { gastos: [] as Gasto[], balance: null as Balance | null },
+  );
 
   const eliminarGasto = async (gasto: Gasto) => {
-    const mensaje = gasto.recurrente 
+    const mensaje = gasto.recurrente
       ? "¿Estás seguro de eliminar este gasto? Al ser recurrente, también se eliminarán todos los registros de los meses siguientes."
       : "¿Estás seguro de eliminar este gasto?";
-      
+
     if (!window.confirm(mensaje)) return;
 
     try {
       await GastosApi.eliminar(gasto.id);
       cargarDatos();
     } catch (e) {
-      setError((e as Error).message);
+      alert((e as Error).message);
     }
   };
 

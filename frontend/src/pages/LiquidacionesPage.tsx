@@ -3,21 +3,21 @@ import { ProfesoresApi } from "../api/modules";
 import type { Profesor, Liquidacion } from "../api/types";
 import { Card, CardHeader, Button, Select, Input, Modal, ErrorBanner, Badge, EmptyState } from "../components/ui";
 import { formatMoney } from "../lib/format";
+import { useApi } from "../lib/useApi";
 
 export default function LiquidacionesPage() {
-  const [profesores, setProfesores] = useState<Profesor[]>([]);
-  const [liquidaciones, setLiquidaciones] = useState<Liquidacion[]>([]);
-  const [error, setError] = useState("");
+  const {
+    data: { profesores, liquidaciones }, error, reload: cargar,
+  } = useApi(
+    async () => {
+      const [profesores, liquidaciones] = await Promise.all([ProfesoresApi.listar(), ProfesoresApi.listarLiquidaciones()]);
+      return { profesores, liquidaciones };
+    },
+    [],
+    { profesores: [] as Profesor[], liquidaciones: [] as Liquidacion[] },
+  );
   const [showGenerar, setShowGenerar] = useState(false);
   const [liqAEditar, setLiqAEditar] = useState<Liquidacion | null>(null);
-
-  const cargar = () => {
-    Promise.all([ProfesoresApi.listar(), ProfesoresApi.listarLiquidaciones()])
-      .then(([p, l]) => { setProfesores(p); setLiquidaciones(l); })
-      .catch((e) => setError(e.message));
-  };
-
-  useEffect(() => { cargar(); }, []);
 
   const profesorNombre = (id: number) => profesores.find((p) => p.id === id)?.nombre ?? `#${id}`;
 
@@ -26,7 +26,7 @@ export default function LiquidacionesPage() {
       await ProfesoresApi.marcarLiquidacionPagada(id);
       cargar();
     } catch (e) {
-      setError((e as Error).message);
+      alert((e as Error).message);
     }
   };
 
@@ -156,14 +156,17 @@ function EditarLiquidacionModal({ liquidacion, profesor, onClose, onDone }: { li
     }
   }, [liquidacion]);
 
-  // Recalcular Bruto y Neto visualmente mientras el usuario escribe
+  // Recalcular Bruto y Neto visualmente mientras el usuario escribe.
+  // horas_totales ya representa horas TRABAJADAS (no asignadas), igual que al
+  // generar la liquidación, así que el bruto ya refleja el descuento por
+  // inasistencias. "Descuentos" es informativo/auditable y no se resta de
+  // nuevo del neto (evita descontar dos veces lo mismo).
   useEffect(() => {
     if (profesor) {
       const vHoras = parseFloat(horas) || 0;
-      const vDesc = parseFloat(descuentos) || 0;
       const vBruto = vHoras * Number(profesor.valor_hora);
       setBruto(vBruto);
-      setNeto(vBruto - vDesc);
+      setNeto(vBruto);
     }
   }, [horas, descuentos, profesor]);
 

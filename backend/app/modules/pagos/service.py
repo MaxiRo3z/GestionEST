@@ -90,12 +90,14 @@ def registrar_pago_matricula(db: Session, data: RegistrarPagoMatriculaIn) -> Pag
 
 def marcar_cuotas_vencidas(db: Session) -> int:
     """Job idempotente: pasa a estado 'vencida' toda cuota pendiente cuya
-    fecha_vencimiento ya pasó. Pensado para correr como tarea diaria."""
-    from datetime import date
+    fecha_vencimiento ya pasó. Corre automáticamente todos los días (ver
+    app/core/scheduler.py); también se puede disparar a mano vía
+    POST /api/pagos/marcar-vencidas."""
     from sqlalchemy import select
+    from app.core.timezone import hoy as hoy_local
 
     cuotas = db.scalars(
-        select(Cuota).where(Cuota.estado == "pendiente", Cuota.fecha_vencimiento < date.today())
+        select(Cuota).where(Cuota.estado == "pendiente", Cuota.fecha_vencimiento < hoy_local())
     ).all()
     for cuota in cuotas:
         cuota.estado = "vencida"

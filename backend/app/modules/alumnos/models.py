@@ -3,6 +3,7 @@ from decimal import Decimal
 from sqlalchemy import String, Boolean, ForeignKey, Numeric, Date, DateTime, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.timezone import hoy as hoy_local
 from app.db.session import Base
 
 
@@ -27,7 +28,7 @@ class Inscripcion(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     alumno_id: Mapped[int] = mapped_column(ForeignKey("alumnos.id"))
     curso_id: Mapped[int] = mapped_column(ForeignKey("cursos.id"))
-    fecha_inscripcion: Mapped[date] = mapped_column(Date, default=date.today)
+    fecha_inscripcion: Mapped[date] = mapped_column(Date, default=hoy_local)
     matricula_pagada: Mapped[bool] = mapped_column(Boolean, default=False)
     valor_matricula_congelado: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     estado: Mapped[str] = mapped_column(String(20), default="activa")  # activa/baja/finalizada

@@ -1,33 +1,46 @@
-import { useEffect, useState } from "react";
-import { DashboardApi } from "../api/modules";
-import type { DashboardAlertas } from "../api/types";
-import { Card, CardHeader, Badge, EmptyState, ErrorBanner } from "../components/ui";
+import { useState } from "react";
+import { CursosApi, DashboardApi } from "../api/modules";
+import type { Curso, DashboardAlertas } from "../api/types";
+import { Card, CardHeader, Badge, EmptyState, ErrorBanner, Select } from "../components/ui";
 import { formatMoney, formatDate } from "../lib/format";
+import { useApi, useApiList } from "../lib/useApi";
+
+const VACIO: DashboardAlertas = {
+  cuotas_vencidas: [], cuotas_por_vencer: [], matriculas_pendientes: [], liquidaciones_pendientes: [],
+  resumen: { total_cuotas_vencidas: 0, total_cuotas_por_vencer: 0, total_matriculas_pendientes: 0, total_liquidaciones_pendientes: 0 },
+};
 
 export default function DashboardPage() {
-  const [data, setData] = useState<DashboardAlertas | null>(null);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [cursoId, setCursoId] = useState("");
 
-  useEffect(() => {
-    DashboardApi.alertas(7)
-      .then(setData)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, []);
-
-  if (loading) return <p className="text-slate-400 text-sm">Cargando...</p>;
-  if (error) return <ErrorBanner message={error} />;
-  if (!data) return null;
+  const { data: cursos } = useApiList<Curso>(() => CursosApi.listar(), []);
+  const { data, loading, error } = useApi<DashboardAlertas>(
+    () => DashboardApi.alertas(7, cursoId ? Number(cursoId) : undefined),
+    [cursoId],
+    VACIO,
+  );
 
   const { resumen } = data;
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-slate-900">Panel de Alertas</h2>
-        <p className="text-slate-500 text-sm mt-1">Estado general del instituto, actualizado en tiempo real.</p>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900">Panel de Alertas</h2>
+          <p className="text-slate-500 text-sm mt-1">Estado general del instituto, actualizado en tiempo real.</p>
+        </div>
+        <div className="w-64">
+          <Select
+            label="Filtrar por curso"
+            value={cursoId}
+            onChange={setCursoId}
+            options={[{ value: "", label: "Todos los cursos" }, ...cursos.map((c) => ({ value: String(c.id), label: c.nombre }))]}
+          />
+        </div>
       </div>
+
+      {error && <ErrorBanner message={error} />}
+      {loading && <p className="text-slate-400 text-sm">Cargando...</p>}
 
       <div className="grid grid-cols-4 gap-4">
         <SummaryCard label="Cuotas vencidas" value={resumen.total_cuotas_vencidas} tone="red" />

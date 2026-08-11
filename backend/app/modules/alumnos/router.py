@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from app.db.session import get_db
@@ -12,8 +12,32 @@ router = APIRouter(prefix="/api/alumnos", tags=["Alumnos"])
 
 
 @router.get("", response_model=list[AlumnoOut])
-def listar_alumnos(db: Session = Depends(get_db)):
-    return db.scalars(select(Alumno).order_by(Alumno.apellido)).all()
+def listar_alumnos(
+    response: Response,
+    limit: int | None = None,
+    offset: int = 0,
+    activo: bool | None = None,
+    db: Session = Depends(get_db),
+):
+    """Sin `limit` devuelve la lista completa (así la usan otras pantallas,
+    como Cobranzas, para armar el listado de nombres por id). Pasando
+    `limit`/`offset` se pagina de verdad: el total real (ya filtrado por
+    `activo` si se pasó) viaja en el header X-Total-Count para que el
+    frontend arme los controles de página sin cambiar la forma de la
+    respuesta."""
+    count_stmt = select(func.count()).select_from(Alumno)
+    stmt = select(Alumno)
+    if activo is not None:
+        count_stmt = count_stmt.where(Alumno.activo == activo)
+        stmt = stmt.where(Alumno.activo == activo)
+
+    total = db.scalar(count_stmt)
+    response.headers["X-Total-Count"] = str(total)
+
+    stmt = stmt.order_by(Alumno.apellido)
+    if limit is not None:
+        stmt = stmt.offset(offset).limit(limit)
+    return db.scalars(stmt).all()
 
 
 @router.post("", response_model=AlumnoOut, status_code=201)

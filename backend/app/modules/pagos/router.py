@@ -1,7 +1,7 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.db.session import get_db
 from app.modules.pagos.models import Cuota, MetodoPago, Pago
@@ -97,8 +97,21 @@ def pagar_matricula(data: RegistrarPagoMatriculaIn, db: Session = Depends(get_db
 
 # ---- Listado general de pagos ----
 @router.get("", response_model=list[PagoOut])
-def listar_pagos(db: Session = Depends(get_db)):
-    return db.scalars(select(Pago).order_by(Pago.fecha_pago.desc())).all()
+def listar_pagos(
+    response: Response,
+    limit: int | None = None,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+):
+    """Igual que /api/alumnos: sin `limit` devuelve todo (compatibilidad),
+    con `limit`/`offset` pagina y el total viaja en X-Total-Count."""
+    total = db.scalar(select(func.count()).select_from(Pago))
+    response.headers["X-Total-Count"] = str(total)
+
+    stmt = select(Pago).order_by(Pago.fecha_pago.desc())
+    if limit is not None:
+        stmt = stmt.offset(offset).limit(limit)
+    return db.scalars(stmt).all()
 
 @router.post("/marcar-vencidas")
 def marcar_vencidas(db: Session = Depends(get_db)):

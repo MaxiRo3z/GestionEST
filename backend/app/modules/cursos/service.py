@@ -3,6 +3,7 @@ from sqlalchemy import select
 
 from app.modules.cursos.models import Curso, CursoPrecio
 from app.modules.pagos.models import Cuota, AjustePrecio
+from app.modules.alumnos.models import Inscripcion
 from app.modules.cursos.schemas import CursoCreate, AjusteArancelIn
 
 
@@ -48,17 +49,22 @@ def aplicar_ajuste_arancel(db: Session, curso_id: int, data: AjusteArancelIn) ->
     )
     db.add(nuevo_precio)
 
-    # 1. Actualizar cuotas pendientes
+    # 1. Actualizar cuotas pendientes.
+    # El filtro por curso_id va en el propio JOIN/WHERE de la consulta SQL
+    # (en vez de traer todas las cuotas pendientes del sistema y filtrar en
+    # Python), para que el costo de un ajuste de arancel dependa solo del
+    # tamaño del curso afectado y no del total de alumnos del instituto.
     cuotas_pendientes = db.scalars(
         select(Cuota)
         .join(Cuota.inscripcion)
-        .where(Cuota.estado.in_(["pendiente", "vencida"]))
+        .where(
+            Inscripcion.curso_id == curso.id,
+            Cuota.estado.in_(["pendiente", "vencida"]),
+        )
     ).all()
 
     cuotas_tocadas = 0
     for cuota in cuotas_pendientes:
-        if cuota.inscripcion.curso_id != curso.id:
-            continue
         if cuota.valor_actualizado == data.nuevo_valor_cuota:
             continue
         ajuste = AjustePrecio(
@@ -72,8 +78,7 @@ def aplicar_ajuste_arancel(db: Session, curso_id: int, data: AjusteArancelIn) ->
         db.add(ajuste)
         cuotas_tocadas += 1
 
-    # 2. NUEVO: Actualizar matrículas impagas de ese curso
-    from app.modules.alumnos.models import Inscripcion # Importación local para evitar ciclos
+    # 2. Actualizar matrículas impagas de ese curso
     inscripciones_sin_pagar = db.scalars(
         select(Inscripcion).where(
             Inscripcion.curso_id == curso.id,

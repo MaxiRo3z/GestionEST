@@ -1,47 +1,60 @@
-from datetime import date, timedelta
+from datetime import timedelta
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import select
 
+from app.core.timezone import hoy as hoy_local
 from app.db.session import get_db
 from app.modules.pagos.models import Cuota
 from app.modules.profesores.models import Liquidacion
 from app.modules.alumnos.models import Inscripcion
-from app.modules.gastos.models import Gasto
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
 
 
 @router.get("/alertas")
-def alertas(dias_proximos: int = 7, db: Session = Depends(get_db)):
-    hoy = date.today()
+def alertas(dias_proximos: int = 7, curso_id: int | None = None, db: Session = Depends(get_db)):
+    hoy = hoy_local()
     limite = hoy + timedelta(days=dias_proximos)
 
     # Cuotas vencidas (impagas, fecha ya pasada)
-    cuotas_vencidas = db.scalars(
+    stmt_vencidas = (
         select(Cuota)
+        .join(Cuota.inscripcion)
         .options(joinedload(Cuota.inscripcion).joinedload(Inscripcion.alumno))
         .where(Cuota.estado.in_(["pendiente", "vencida"]), Cuota.fecha_vencimiento < hoy)
         .order_by(Cuota.fecha_vencimiento)
-    ).all()
+    )
+    if curso_id:
+        stmt_vencidas = stmt_vencidas.where(Inscripcion.curso_id == curso_id)
+    cuotas_vencidas = db.scalars(stmt_vencidas).all()
 
     # Cuotas por vencer pronto
-    cuotas_por_vencer = db.scalars(
+    stmt_por_vencer = (
         select(Cuota)
+        .join(Cuota.inscripcion)
         .options(joinedload(Cuota.inscripcion).joinedload(Inscripcion.alumno))
         .where(Cuota.estado == "pendiente", Cuota.fecha_vencimiento >= hoy, Cuota.fecha_vencimiento <= limite)
         .order_by(Cuota.fecha_vencimiento)
-    ).all()
+    )
+    if curso_id:
+        stmt_por_vencer = stmt_por_vencer.where(Inscripcion.curso_id == curso_id)
+    cuotas_por_vencer = db.scalars(stmt_por_vencer).all()
 
     # Matrículas impagas
-    matriculas_pendientes = db.scalars(
+    stmt_matriculas = (
         select(Inscripcion)
         .options(joinedload(Inscripcion.alumno))
         .where(Inscripcion.matricula_pagada.is_(False), Inscripcion.estado == "activa")
-    ).all()
+    )
+    if curso_id:
+        stmt_matriculas = stmt_matriculas.where(Inscripcion.curso_id == curso_id)
+    matriculas_pendientes = db.scalars(stmt_matriculas).all()
 
-    # Liquidaciones docentes generadas pero no pagadas
+    # Liquidaciones docentes generadas pero no pagadas.
+    # No se filtran por curso_id: una liquidación es mensual por profesor y
+    # agrega horas de todos los cursos que dictó ese mes, no pertenece a uno solo.
     liquidaciones_pendientes = db.scalars(
         select(Liquidacion).options(joinedload(Liquidacion.profesor)).where(Liquidacion.pagado.is_(False))
     ).all()

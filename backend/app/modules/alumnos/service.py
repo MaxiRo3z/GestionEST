@@ -4,6 +4,7 @@ from datetime import date
 from sqlalchemy.orm import Session
 from sqlalchemy import select  # NUEVO: Importamos select para la consulta
 
+from app.core.timezone import hoy as hoy_local
 from app.modules.alumnos.models import Alumno, Inscripcion
 from app.modules.alumnos.schemas import AlumnoCreate, InscripcionCreate
 from app.modules.cursos.models import Curso
@@ -66,7 +67,7 @@ def crear_inscripcion(db: Session, data: InscripcionCreate) -> Inscripcion:
     db.add(inscripcion)
     db.flush()
 
-    hoy = date.today()
+    hoy = hoy_local()
     primer_vencimiento = date(hoy.year, hoy.month, min(data.dia_vencimiento, 28))
     if primer_vencimiento <= hoy:
         primer_vencimiento = _sumar_meses(primer_vencimiento, 1)

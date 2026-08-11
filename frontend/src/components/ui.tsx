@@ -124,6 +124,34 @@ export function Modal({ open, onClose, title, children }: { open: boolean; onClo
   );
 }
 
+// Controles de paginación genéricos: se usan con cualquier listado que
+// devuelva {total, page, pageSize} (ver AlumnosApi.listarPaginado / useApi).
+export function Pagination({
+  page, pageSize, total, onPageChange,
+}: { page: number; pageSize: number; total: number; onPageChange: (page: number) => void }) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  if (total === 0) return null;
+  const desde = (page - 1) * pageSize + 1;
+  const hasta = Math.min(page * pageSize, total);
+
+  return (
+    <div className="flex items-center justify-between px-5 py-3 border-t border-slate-100 text-sm">
+      <span className="text-slate-500">
+        Mostrando {desde}–{hasta} de {total}
+      </span>
+      <div className="flex items-center gap-2">
+        <Button variant="secondary" onClick={() => onPageChange(page - 1)} disabled={page <= 1}>
+          &larr; Anterior
+        </Button>
+        <span className="text-slate-500 px-1">Página {page} de {totalPages}</span>
+        <Button variant="secondary" onClick={() => onPageChange(page + 1)} disabled={page >= totalPages}>
+          Siguiente &rarr;
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function EmptyState({ text }: { text: string }) {
   return <div className="text-center text-sm text-slate-400 py-10 font-medium">{text}</div>;
 }

@@ -38,6 +38,12 @@ class AsistenciaProfesorOut(BaseModel):
     observacion: str | None = None
 
 
+class AsistenciaProfesorUpdate(BaseModel):
+    horas_asignadas: Decimal
+    horas_trabajadas: Decimal
+    observacion: str | None = None
+
+
 class GenerarLiquidacionIn(BaseModel):
     profesor_id: int
     periodo: date  # cualquier día del mes a liquidar; se normaliza al día 1

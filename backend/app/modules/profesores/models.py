@@ -21,6 +21,11 @@ class Profesor(Base):
 
 class AsistenciaProfesor(Base):
     __tablename__ = "asistencias_profesores"
+    # Un profesor no puede tener dos registros de asistencia para el mismo
+    # curso el mismo día (evita duplicar horas por error y que se infle la
+    # liquidación). Si el profesor dicta más de un curso el mismo día, cada
+    # curso queda como una fila distinta.
+    __table_args__ = (UniqueConstraint("profesor_id", "curso_id", "fecha", name="uq_profesor_curso_fecha"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     profesor_id: Mapped[int] = mapped_column(ForeignKey("profesores.id"))

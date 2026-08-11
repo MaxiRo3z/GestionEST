@@ -22,9 +22,11 @@ hiddenimports = (
     + collect_submodules("sqlalchemy")
     + collect_submodules("psycopg2")
     + collect_submodules("pydantic")
-    + collect_submodules("reportlab")
     + collect_submodules("fpdf")
     + collect_submodules("uvicorn")
+    + collect_submodules("apscheduler")
+    + collect_submodules("jwt")
+    + collect_submodules("bcrypt")
 )
 
 datas = (
@@ -33,7 +35,11 @@ datas = (
     # "alembic" -- si tuviera el mismo nombre, "import alembic" resuelve mal
     # incluso durante la compilación con PyInstaller, no solo en el paquete final.
     [("migrations", "migrations"), ("alembic.ini", "."), (".env", "."), ("frontend_dist", "frontend_dist")]
-    + collect_data_files("reportlab")
+    # tzdata es paquete de solo datos (base IANA de zonas horarias). Sin esto,
+    # zoneinfo.ZoneInfo("America/Argentina/Buenos_Aires") falla en Windows,
+    # que no trae esa base incluida en el sistema operativo (a diferencia de
+    # Linux/Mac). Ver app/core/timezone.py.
+    + collect_data_files("tzdata")
 )
 
 a = Analysis(

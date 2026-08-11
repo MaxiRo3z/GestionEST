@@ -15,7 +15,12 @@ services:
     branch: main
     rootDir: backend
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    # "alembic upgrade head" aplica las migraciones nuevas (usuarios,
+    # unicidad de asistencia docente) y "python -m app.db.seed" crea el
+    # usuario administrador SOLO si la tabla "usuarios" está vacía todavía
+    # (no pisa la contraseña si ya la cambiaste) -- por eso es seguro que
+    # corra en cada arranque, no solo la primera vez.
+    startCommand: "alembic upgrade head && python -m app.db.seed && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
     envVars:
       - key: DATABASE_URL
         sync: false   # se carga a mano en el dashboard (viene de Neon)
@@ -27,3 +32,13 @@ services:
         sync: false   # se carga a mano: URL del frontend en Cloudflare Pages
       - key: PYTHON_VERSION
         value: "3.11.9"
+      - key: APP_TIMEZONE
+        value: "America/Argentina/Buenos_Aires"
+      # --- Autenticación (nuevo) ---
+      - key: JWT_SECRET_KEY
+        sync: false   # OBLIGATORIO: generar un valor propio y secreto en el dashboard,
+                       # nunca dejar el default del código en producción.
+      - key: ADMIN_USERNAME
+        sync: false   # usuario del admin que crea el seed la primera vez
+      - key: ADMIN_PASSWORD
+        sync: false   # contraseña inicial; cambiarla desde la app después del primer login

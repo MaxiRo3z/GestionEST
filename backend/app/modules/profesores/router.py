@@ -1,12 +1,15 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from app.db.session import get_db
 from app.modules.profesores.models import Profesor, AsistenciaProfesor, Liquidacion
 from app.modules.profesores.schemas import (
     ProfesorCreate, ProfesorOut, AsistenciaProfesorCreate, AsistenciaProfesorOut,
-    GenerarLiquidacionIn, LiquidacionOut,LiquidacionUpdate
+    AsistenciaProfesorUpdate, GenerarLiquidacionIn, LiquidacionOut, LiquidacionUpdate
 )
 from app.modules.profesores import service
 
@@ -31,17 +34,51 @@ def crear_profesor(data: ProfesorCreate, db: Session = Depends(get_db)):
 def cargar_asistencia(data: AsistenciaProfesorCreate, db: Session = Depends(get_db)):
     asistencia = AsistenciaProfesor(**data.model_dump())
     db.add(asistencia)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            400,
+            "Ya existe una asistencia cargada para este profesor, en ese curso, en esa fecha. "
+            "Si necesitás corregirla, editá el registro existente en vez de cargar uno nuevo.",
+        )
     db.refresh(asistencia)
     return asistencia
 
 
 @router.get("/asistencias", response_model=list[AsistenciaProfesorOut])
-def listar_asistencias(profesor_id: int | None = None, db: Session = Depends(get_db)):
+def listar_asistencias(
+    profesor_id: int | None = None,
+    fecha: date | None = None,
+    db: Session = Depends(get_db),
+):
+    """Si se pasa `fecha` (sin profesor_id) devuelve las asistencias de TODOS
+    los profesores para ese día — es lo que usa la carga masiva "por día" del
+    frontend para saber quién ya tiene horas cargadas hoy y quién no."""
     stmt = select(AsistenciaProfesor)
     if profesor_id:
         stmt = stmt.where(AsistenciaProfesor.profesor_id == profesor_id)
+    if fecha:
+        stmt = stmt.where(AsistenciaProfesor.fecha == fecha)
     return db.scalars(stmt.order_by(AsistenciaProfesor.fecha.desc())).all()
+
+
+@router.put("/asistencias/{asistencia_id}", response_model=AsistenciaProfesorOut)
+def editar_asistencia(asistencia_id: int, data: AsistenciaProfesorUpdate, db: Session = Depends(get_db)):
+    """Corrige horas/observación de una asistencia ya cargada (mismo
+    profesor/curso/fecha) sin duplicar el registro."""
+    asistencia = db.get(AsistenciaProfesor, asistencia_id)
+    if not asistencia:
+        raise HTTPException(404, "Asistencia no encontrada")
+
+    asistencia.horas_asignadas = data.horas_asignadas
+    asistencia.horas_trabajadas = data.horas_trabajadas
+    asistencia.observacion = data.observacion
+
+    db.commit()
+    db.refresh(asistencia)
+    return asistencia
 
 
 @router.post("/liquidaciones/generar", response_model=LiquidacionOut)
@@ -84,10 +121,14 @@ def editar_liquidacion(liquidacion_id: int, data: LiquidacionUpdate, db: Session
     # Actualizamos las horas y los descuentos
     liq.horas_totales = data.horas_totales
     liq.descuentos = data.descuentos
-    
-    # Recalculamos la plata automáticamente: Horas * Valor Hora
+
+    # Recalculamos la plata automáticamente: Horas * Valor Hora.
+    # horas_totales representa horas YA TRABAJADAS (no asignadas), igual que en
+    # generar_liquidacion(), así que valor_bruto ya refleja el descuento por
+    # inasistencias. "descuentos" es un dato informativo/auditable y NO se resta
+    # de nuevo acá (si se restara, se estaría descontando dos veces).
     liq.valor_bruto = liq.horas_totales * profesor.valor_hora
-    liq.valor_neto = liq.valor_bruto - liq.descuentos
+    liq.valor_neto = liq.valor_bruto
     
     db.commit()
     db.refresh(liq)

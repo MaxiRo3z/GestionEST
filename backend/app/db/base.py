@@ -13,6 +13,7 @@ la base de datos.
 """
 from app.db.session import Base  # noqa: F401
 
+from app.modules.auth.models import Usuario  # noqa: F401
 from app.modules.cursos.models import Curso, CursoPrecio  # noqa: F401
 from app.modules.alumnos.models import Alumno, Inscripcion  # noqa: F401
 from app.modules.pagos.models import Cuota, AjustePrecio, MetodoPago, Pago  # noqa: F401

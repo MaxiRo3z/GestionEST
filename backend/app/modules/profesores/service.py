@@ -4,6 +4,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
+from app.core.timezone import hoy as hoy_local
 from app.modules.profesores.models import Profesor, AsistenciaProfesor, Liquidacion
 from app.modules.profesores.schemas import GenerarLiquidacionIn
 from app.events.bus import event_bus
@@ -102,15 +103,15 @@ def marcar_liquidacion_pagada(db: Session, liquidacion_id: int) -> Liquidacion:
     profesor = db.get(Profesor, liquidacion.profesor_id)
     
     liquidacion.pagado = True
-    liquidacion.fecha_pago = date.today()
-    
+    liquidacion.fecha_pago = hoy_local()
+
     # --- NUEVA LÓGICA: Creación automática del Gasto ---
     descripcion_periodo = liquidacion.periodo.strftime("%m/%Y")
     nuevo_gasto = Gasto(
         categoria="Honorarios Profesores",
         descripcion=f"Liquidación - {profesor.nombre} (Periodo: {descripcion_periodo})",
         monto=liquidacion.valor_neto,
-        fecha=date.today(),
+        fecha=hoy_local(),
         recurrente=False,
         gasto_padre_id=None
     )

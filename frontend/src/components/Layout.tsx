@@ -1,4 +1,5 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { useAuth } from "../auth/AuthContext";
 
 const NAV_ITEMS = [
   { to: "/", label: "Dashboard", icon: "📊", end: true },
@@ -12,6 +13,14 @@ const NAV_ITEMS = [
 ];
 
 export default function Layout() {
+  const { usuario, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login", { replace: true });
+  };
+
   return (
     <div className="flex min-h-screen">
       {/* Fondo del menú actualizado a tu variable de gris oscuro */}
@@ -55,6 +64,20 @@ export default function Layout() {
           ))}
         </nav>
         
+        {usuario && (
+          <div className="px-4 py-3 border-t border-brand-gray flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-xs text-slate-400">Conectado como</p>
+              <p className="text-sm text-slate-200 font-medium truncate">{usuario.username}</p>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="text-xs font-medium text-slate-300 hover:text-brand-terra-light px-2 py-1.5 rounded-lg hover:bg-brand-gray transition-colors shrink-0"
+            >
+              Salir
+            </button>
+          </div>
+        )}
         <div className="px-5 py-4 text-xs text-slate-400 bg-brand-gray-dark border-t border-brand-gray text-center font-medium opacity-50">
           Sistema local · PostgreSQL
         </div>

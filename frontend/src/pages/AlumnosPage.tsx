@@ -1,40 +1,63 @@
 import { useEffect, useState } from "react";
 import { AlumnosApi, CursosApi, InscripcionesApi, ComprobantesApi } from "../api/modules";
+import { BASE_URL } from "../api/client";
 import type { Alumno, Curso, Inscripcion, Comprobante } from "../api/types";
-import { Card, CardHeader, Button, Input, Select, Modal, ErrorBanner, Badge, EmptyState } from "../components/ui";
+import { Card, CardHeader, Button, Input, Select, Modal, ErrorBanner, Badge, EmptyState, Pagination } from "../components/ui";
 import { formatMoney } from "../lib/format";
+import { useApi, useApiList } from "../lib/useApi";
+
+const PAGE_SIZE = 20;
 
 export default function AlumnosPage() {
-  const [alumnos, setAlumnos] = useState<Alumno[]>([]);
-  const [inscripciones, setInscripciones] = useState<Inscripcion[]>([]);
-  const [cursos, setCursos] = useState<Curso[]>([]);
-  const [error, setError] = useState("");
-  
+  const [page, setPage] = useState(1);
+
+  // Alumnos paginados de verdad (la lista puede crecer indefinidamente).
+  const {
+    data: alumnosResp, loading: loadingAlumnos, error: errorAlumnos, reload: reloadAlumnos,
+  } = useApi(
+    () => AlumnosApi.listarPaginado(PAGE_SIZE, (page - 1) * PAGE_SIZE, true),
+    [page],
+    { data: [] as Alumno[], total: 0 as number | null },
+  );
+  const alumnosActivos = alumnosResp.data;
+  const totalAlumnos = alumnosResp.total ?? 0;
+
+  // Inscripciones y cursos se siguen trayendo completos: hacen falta enteros
+  // para resolver nombres/badges de cualquier alumno de cualquier página.
+  const { data: inscripciones, error: errorInscripciones, reload: reloadInscripciones } =
+    useApiList<Inscripcion>(() => InscripcionesApi.listar(), []);
+  const { data: cursos, error: errorCursos } = useApiList<Curso>(() => CursosApi.listar(), []);
+
+  const error = errorAlumnos || errorInscripciones || errorCursos;
+
   const [showCreateAlumno, setShowCreateAlumno] = useState(false);
   const [alumnoAEditar, setAlumnoAEditar] = useState<Alumno | null>(null);
   const [showInscribir, setShowInscribir] = useState<Alumno | null>(null);
-  
+
   // NUEVO ESTADO: Para saber de qué alumno estamos viendo los comprobantes
   const [alumnoComprobantes, setAlumnoComprobantes] = useState<Alumno | null>(null);
-  
-  const alumnosActivos = alumnos.filter(a => a.activo !== false);
 
-  const cargarTodo = () => {
-    Promise.all([AlumnosApi.listar(), InscripcionesApi.listar(), CursosApi.listar()])
-      .then(([a, i, c]) => { setAlumnos(a); setInscripciones(i); setCursos(c); })
-      .catch((e) => setError(e.message));
+  const refrescarTodo = () => {
+    reloadAlumnos();
+    reloadInscripciones();
   };
 
-  useEffect(() => { cargarTodo(); }, []);
+  // Si se borró el último alumno de la página actual (y no es la primera
+  // página), volvemos una página para no quedar mostrando una vacía.
+  useEffect(() => {
+    if (!loadingAlumnos && alumnosActivos.length === 0 && page > 1) {
+      setPage((p) => p - 1);
+    }
+  }, [loadingAlumnos, alumnosActivos.length, page]);
 
   const eliminarAlumno = async (alumno: Alumno) => {
     if (!window.confirm(`¿Estás seguro de eliminar a ${alumno.nombre} ${alumno.apellido}? Se borrarán también sus inscripciones y cuotas pendientes.`)) return;
-    
+
     try {
       await AlumnosApi.eliminar(alumno.id);
-      cargarTodo();
+      refrescarTodo();
     } catch (e) {
-      setError((e as Error).message);
+      alert((e as Error).message);
     }
   };
 
@@ -55,7 +78,7 @@ export default function AlumnosPage() {
       <Card>
         <CardHeader title="Alumnos" />
         <div className="divide-y divide-slate-100">
-          {alumnosActivos.length === 0 && <EmptyState text="Todavía no hay alumnos cargados" />}
+          {!loadingAlumnos && alumnosActivos.length === 0 && <EmptyState text="Todavía no hay alumnos cargados" />}
           {alumnosActivos.map((alumno) => {
             const suyas = inscripciones.filter((i) => i.alumno_id === alumno.id);
             return (
@@ -103,15 +126,16 @@ export default function AlumnosPage() {
             );
           })}
         </div>
+        <Pagination page={page} pageSize={PAGE_SIZE} total={totalAlumnos} onPageChange={setPage} />
       </Card>
 
-      <GestionarAlumnoModal 
-        open={showCreateAlumno || !!alumnoAEditar} 
+      <GestionarAlumnoModal
+        open={showCreateAlumno || !!alumnoAEditar}
         alumno={alumnoAEditar}
-        onClose={() => { setShowCreateAlumno(false); setAlumnoAEditar(null); }} 
-        onSaved={() => { setShowCreateAlumno(false); setAlumnoAEditar(null); cargarTodo(); }} 
+        onClose={() => { setShowCreateAlumno(false); setAlumnoAEditar(null); }}
+        onSaved={() => { setShowCreateAlumno(false); setAlumnoAEditar(null); refrescarTodo(); }}
       />
-      <InscribirModal alumno={showInscribir} cursos={cursos} onClose={() => setShowInscribir(null)} onDone={() => { setShowInscribir(null); cargarTodo(); }} />
+      <InscribirModal alumno={showInscribir} cursos={cursos} onClose={() => setShowInscribir(null)} onDone={() => { setShowInscribir(null); refrescarTodo(); }} />
       
       {/* NUEVO MODAL: Historial de Comprobantes */}
       <HistorialComprobantesModal 
@@ -279,7 +303,7 @@ function HistorialComprobantesModal({ alumno, onClose }: { alumno: Alumno | null
                 <Button 
                   variant="secondary" 
                   className="text-xs py-1.5 px-3 flex items-center gap-2"
-                  onClick={() => window.open(`http://localhost:8000/api/comprobantes/${comp.id}/pdf`, '_blank')}
+                  onClick={() => window.open(`${BASE_URL}/api/comprobantes/${comp.id}/pdf`, '_blank')}
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path></svg>
                   PDF
