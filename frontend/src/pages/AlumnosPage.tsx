@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { AlumnosApi, CursosApi, InscripcionesApi, ComprobantesApi } from "../api/modules";
-import { BASE_URL } from "../api/client";
+import { downloadFile } from "../api/client";
 import type { Alumno, Curso, Inscripcion, Comprobante } from "../api/types";
 import { Card, CardHeader, Button, Input, Select, Modal, ErrorBanner, Badge, EmptyState, Pagination } from "../components/ui";
 import { formatMoney } from "../lib/format";
@@ -300,10 +300,14 @@ function HistorialComprobantesModal({ alumno, onClose }: { alumno: Alumno | null
                     {comp.tipo.toUpperCase()} · Emitido el {new Date(comp.creado_en).toLocaleDateString("es-AR")}
                   </p>
                 </div>
-                <Button 
-                  variant="secondary" 
+                <Button
+                  variant="secondary"
                   className="text-xs py-1.5 px-3 flex items-center gap-2"
-                  onClick={() => window.open(`${BASE_URL}/api/comprobantes/${comp.id}/pdf`, '_blank')}
+                  onClick={() =>
+                    downloadFile(`/api/comprobantes/${comp.id}/pdf`, `comprobante_${comp.numero_comprobante}.pdf`).catch((e) =>
+                      setError((e as Error).message)
+                    )
+                  }
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path></svg>
                   PDF

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { AlumnosApi, CursosApi, InscripcionesApi, PagosApi } from "../api/modules";
-import { BASE_URL } from "../api/client";
+import { downloadFile } from "../api/client";
 import type { Alumno, Curso, Inscripcion, Cuota, MetodoPago } from "../api/types";
 import { Card, Button, Select, Input, Modal, ErrorBanner, Badge, EmptyState } from "../components/ui";
 import { formatMoney, formatDate } from "../lib/format";
@@ -262,9 +262,13 @@ function PagoModal({
             
             {/* NUEVO: Botón de descarga condicional si el backend devolvió el ID */}
             {comprobanteId && (
-              <Button 
-                className="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-900" 
-                onClick={() => window.open(`${BASE_URL}/api/comprobantes/${comprobanteId}/pdf`, '_blank')}
+              <Button
+                className="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-900"
+                onClick={() =>
+                  downloadFile(`/api/comprobantes/${comprobanteId}/pdf`, `comprobante_${comprobanteId}.pdf`).catch((e) =>
+                    setError((e as Error).message)
+                  )
+                }
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path></svg>
                 Descargar Comprobante PDF

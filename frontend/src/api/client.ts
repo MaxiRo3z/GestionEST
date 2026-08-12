@@ -104,6 +104,51 @@ async function requestWithTotal<T>(path: string, options: RequestInit = {}): Pro
   return { data: (await res.json()) as T, total: totalHeader ? Number(totalHeader) : null };
 }
 
+/**
+ * Descarga un archivo binario (ej: PDF de comprobante) protegido por login.
+ * No se puede usar window.open(url) para esto: esa navegación no manda el
+ * header Authorization (solo lo agrega este cliente fetch), así que el
+ * backend devuelve 401 "No autenticado" y el usuario ve ese JSON crudo en
+ * una pestaña nueva. En cambio, acá se pide el archivo con el token, se arma
+ * un blob en memoria y se dispara la descarga desde un <a> temporal.
+ */
+async function downloadFile(path: string, fallbackFilename: string): Promise<void> {
+  const token = getToken();
+  const res = await fetch(`${BASE_URL}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+
+  if (res.status === 401) {
+    clearToken();
+    window.dispatchEvent(new CustomEvent("auth:unauthorized"));
+  }
+
+  if (!res.ok) {
+    let detail = res.statusText;
+    try {
+      const body = await res.json();
+      detail = body.detail || JSON.stringify(body);
+    } catch {
+      /* respuesta sin cuerpo JSON */
+    }
+    throw new ApiError(res.status, detail);
+  }
+
+  const disposition = res.headers.get("Content-Disposition") || "";
+  const match = disposition.match(/filename=([^;]+)/);
+  const filename = match ? match[1].trim().replace(/^"|"$/g, "") : fallbackFilename;
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 export const api = {
   get: <T>(path: string) => request<T>(path),
   getWithTotal: <T>(path: string) => requestWithTotal<T>(path),
@@ -112,6 +157,7 @@ export const api = {
   put: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "PUT", body: body ? JSON.stringify(body) : undefined }),
   del: <T>(path: string) => request<T>(path, { method: "DELETE" }),
+  downloadFile,
 };
 
-export { ApiError, BASE_URL, getToken, setToken, clearToken };
+export { ApiError, BASE_URL, getToken, setToken, clearToken, downloadFile };
