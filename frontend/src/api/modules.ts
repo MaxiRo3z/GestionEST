@@ -96,7 +96,7 @@ export const ProfesoresApi = {
 export const AsistenciasAlumnosApi = {
   listar: (inscripcionId?: number) =>
     api.get<AsistenciaAlumno[]>(`/api/asistencias-alumnos${inscripcionId ? `?inscripcion_id=${inscripcionId}` : ""}`),
-  cargar: (data: { inscripcion_id: number; fecha: string; presente: boolean }) =>
+  cargar: (data: { inscripcion_id: number; fecha: string; presente: boolean; justificada?: boolean }) =>
     api.post<AsistenciaAlumno>("/api/asistencias-alumnos", data),
 };
 

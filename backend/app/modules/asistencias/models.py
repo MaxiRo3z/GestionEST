@@ -13,5 +13,6 @@ class AsistenciaAlumno(Base):
     inscripcion_id: Mapped[int] = mapped_column(ForeignKey("inscripciones.id"))
     fecha: Mapped[date] = mapped_column(Date, nullable=False)
     presente: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    justificada: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
 
     inscripcion: Mapped["Inscripcion"] = relationship(back_populates="asistencias")

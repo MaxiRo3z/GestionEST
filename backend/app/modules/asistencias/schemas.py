@@ -6,6 +6,7 @@ class AsistenciaAlumnoCreate(BaseModel):
     inscripcion_id: int
     fecha: date
     presente: bool
+    justificada: bool = False
 
 
 class AsistenciaAlumnoOut(BaseModel):
@@ -14,3 +15,4 @@ class AsistenciaAlumnoOut(BaseModel):
     inscripcion_id: int
     fecha: date
     presente: bool
+    justificada: bool

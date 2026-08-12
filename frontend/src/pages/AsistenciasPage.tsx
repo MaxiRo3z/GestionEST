@@ -18,6 +18,10 @@ export default function AsistenciasPage() {
   // Estado local para los checkboxes del día: { [inscripcionId]: boolean }
   const [asistenciasDelDia, setAsistenciasDelDia] = useState<Record<number, boolean>>({});
 
+  // Estado local para "ausencia justificada" del día: { [inscripcionId]: boolean }
+  // Solo tiene sentido cuando el alumno está marcado ausente.
+  const [justificadasDelDia, setJustificadasDelDia] = useState<Record<number, boolean>>({});
+
   // Historial completo, usado ahora solo para armar el PDF (ya no se renderiza como tabla)
   const [asistenciasMes, setAsistenciasMes] = useState<AsistenciaAlumno[]>([]);
 
@@ -36,6 +40,7 @@ export default function AsistenciasPage() {
   useEffect(() => {
     if (!cursoSeleccionado) {
       setAsistenciasDelDia({});
+      setJustificadasDelDia({});
       setAsistenciasMes([]);
       return;
     }
@@ -54,12 +59,15 @@ export default function AsistenciasPage() {
         setAsistenciasMes(todasLasAsistencias);
 
         const mapDia: Record<number, boolean> = { ...estadoInicial };
+        const mapJustificada: Record<number, boolean> = {};
         todasLasAsistencias.forEach(a => {
           if (a.fecha === fecha) {
             mapDia[a.inscripcion_id] = a.presente;
+            mapJustificada[a.inscripcion_id] = a.justificada;
           }
         });
         setAsistenciasDelDia(mapDia);
+        setJustificadasDelDia(mapJustificada);
       } catch (e) {
         setError((e as Error).message);
       }
@@ -82,7 +90,8 @@ export default function AsistenciasPage() {
         return AsistenciasAlumnosApi.cargar({
           inscripcion_id: ins.id,
           fecha: fecha,
-          presente: estadoPresente
+          presente: estadoPresente,
+          justificada: estadoPresente ? false : (justificadasDelDia[ins.id] ?? false)
         });
       });
 
@@ -104,7 +113,8 @@ export default function AsistenciasPage() {
         return AsistenciasAlumnosApi.cargar({
           inscripcion_id: ins.id,
           fecha,
-          presente
+          presente,
+          justificada: presente ? false : (justificadasDelDia[ins.id] ?? false)
         });
       });
       await Promise.all(promesas);
@@ -135,61 +145,126 @@ export default function AsistenciasPage() {
     try {
       const cursoNombre = cursos.find(c => c.id === Number(cursoSeleccionado))?.nombre ?? "Curso";
       const doc = new jsPDF({ orientation: "landscape" });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const generadoEl = formatDate(todayISO());
 
-      doc.setFontSize(14);
-      doc.text(`Asistencias - ${cursoNombre}`, 14, 15);
-      doc.setFontSize(10);
-      doc.text(`Generado el ${formatDate(todayISO())}`, 14, 21);
+      // ---- Encabezado ----
+      doc.setFillColor(30, 41, 59);
+      doc.rect(0, 0, pageWidth, 22, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(15);
+      doc.setFont("helvetica", "bold");
+      doc.text("Instituto Profesional", 14, 10);
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Planilla de Asistencias — ${cursoNombre}`, 14, 17);
+      doc.setFontSize(9);
+      doc.text(`Generado el ${generadoEl}`, pageWidth - 14, 10, { align: "right" });
+      doc.text(`${inscripcionesDelCurso.length} alumno(s) — ${fechasUnicas.length} clase(s)`, pageWidth - 14, 17, { align: "right" });
+      doc.setTextColor(0, 0, 0);
 
-      const head = [["Alumno", ...fechasUnicas.map(f => formatDate(f))]];
+      // ---- Leyenda ----
+      const drawCheck = (x: number, y: number, color: [number, number, number]) => {
+        doc.setDrawColor(...color);
+        doc.setLineWidth(0.6);
+        doc.line(x - 2, y + 0.3, x - 0.4, y + 2);
+        doc.line(x - 0.4, y + 2, x + 2.2, y - 2);
+      };
+      const drawX = (x: number, y: number, color: [number, number, number]) => {
+        doc.setDrawColor(...color);
+        doc.setLineWidth(0.6);
+        doc.line(x - 1.8, y - 1.8, x + 1.8, y + 1.8);
+        doc.line(x - 1.8, y + 1.8, x + 1.8, y - 1.8);
+      };
+      const legendY = 29;
+      doc.setFontSize(8.5);
+      doc.setTextColor(71, 85, 105);
+      drawCheck(16, legendY, [16, 185, 129]);
+      doc.text("Presente", 20, legendY + 1);
+      drawX(56, legendY, [225, 29, 72]);
+      doc.text("Ausente", 60, legendY + 1);
+      drawX(96, legendY, [217, 119, 6]);
+      doc.text("Ausencia justificada", 100, legendY + 1);
+      doc.setTextColor(0, 0, 0);
 
-      // Usamos "P"/"A" como valor crudo (para la lógica), pero el texto no se
-      // dibuja: el tilde y la cruz se pintan a mano con líneas vectoriales en
-      // didDrawCell, evitando el glifo "✓" que la fuente por defecto de jsPDF
-      // no renderiza bien.
+      const head = [["Alumno", ...fechasUnicas.map(f => formatDate(f)), "Presentes", "Ausentes", "Justif."]];
+
+      // Código crudo por celda de fecha: "P" (presente), "A" (ausente) o "AJ" (ausente
+      // justificada). El texto no se dibuja: el tilde y la cruz se pintan a mano con
+      // líneas vectoriales en didDrawCell, evitando glifos que la fuente por defecto
+      // de jsPDF no renderiza bien.
       const body = inscripcionesDelCurso.map(ins => {
-        const fila = [getNombreAlumno(ins.alumno_id)];
-        fechasUnicas.forEach(f => {
+        let presentes = 0, ausentes = 0, justificadas = 0;
+        const celdasFecha = fechasUnicas.map(f => {
           const registro = asistenciasMes.find(a => a.inscripcion_id === ins.id && a.fecha === f);
           const presente = registro ? registro.presente : true;
-          fila.push(presente ? "P" : "A");
+          const justificada = registro ? registro.justificada : false;
+          if (presente) {
+            presentes++;
+            return "P";
+          }
+          ausentes++;
+          if (justificada) {
+            justificadas++;
+            return "AJ";
+          }
+          return "A";
         });
-        return fila;
+        return [getNombreAlumno(ins.alumno_id), ...celdasFecha, String(presentes), String(ausentes), String(justificadas)];
       });
+
+      const primeraColSummary = 1 + fechasUnicas.length;
 
       autoTable(doc, {
         head,
         body,
-        startY: 27,
-        styles: { fontSize: 9, halign: "center", minCellHeight: 8 },
-        headStyles: { fillColor: [30, 41, 59] },
-        columnStyles: { 0: { halign: "left", fontStyle: "bold" } },
+        startY: 34,
+        theme: "grid",
+        styles: { fontSize: 8.5, halign: "center", minCellHeight: 8, lineColor: [203, 213, 225], lineWidth: 0.1 },
+        headStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: "bold" },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        columnStyles: {
+          0: { halign: "left", fontStyle: "bold", cellWidth: 42 },
+          [primeraColSummary]: { fontStyle: "bold", textColor: [16, 185, 129] },
+          [primeraColSummary + 1]: { fontStyle: "bold", textColor: [225, 29, 72] },
+          [primeraColSummary + 2]: { fontStyle: "bold", textColor: [217, 119, 6] },
+        },
         didParseCell: (data) => {
-          // Oculta el texto crudo "P"/"A" en las columnas de fecha; el nombre (columna 0) queda intacto
-          if (data.section === "body" && data.column.index > 0) {
+          // Oculta el texto crudo de las columnas de fecha (nombre y resumen quedan intactos)
+          if (data.section === "body" && data.column.index > 0 && data.column.index < primeraColSummary) {
             data.cell.text = [];
           }
         },
         didDrawCell: (data) => {
-          if (data.section !== "body" || data.column.index === 0) return;
+          if (data.section !== "body" || data.column.index === 0 || data.column.index >= primeraColSummary) return;
 
-          const presente = data.cell.raw === "P";
+          const raw = data.cell.raw;
           const cx = data.cell.x + data.cell.width / 2;
           const cy = data.cell.y + data.cell.height / 2;
 
-          if (presente) {
-            doc.setDrawColor(16, 185, 129);
-            doc.setLineWidth(0.7);
-            doc.line(cx - 2.2, cy + 0.2, cx - 0.5, cy + 2.2);
-            doc.line(cx - 0.5, cy + 2.2, cx + 2.6, cy - 2.4);
+          if (raw === "P") {
+            drawCheck(cx, cy, [16, 185, 129]);
+          } else if (raw === "AJ") {
+            drawX(cx, cy, [217, 119, 6]);
           } else {
-            doc.setDrawColor(225, 29, 72);
-            doc.setLineWidth(0.7);
-            doc.line(cx - 2, cy - 2, cx + 2, cy + 2);
-            doc.line(cx - 2, cy + 2, cx + 2, cy - 2);
+            drawX(cx, cy, [225, 29, 72]);
           }
         },
       });
+
+      // ---- Pie de página con numeración ----
+      const totalPaginas = doc.getNumberOfPages();
+      for (let i = 1; i <= totalPaginas; i++) {
+        doc.setPage(i);
+        const pageHeight = doc.internal.pageSize.getHeight();
+        doc.setDrawColor(203, 213, 225);
+        doc.setLineWidth(0.2);
+        doc.line(14, pageHeight - 12, pageWidth - 14, pageHeight - 12);
+        doc.setFontSize(8);
+        doc.setTextColor(100, 116, 139);
+        doc.text("Sistema de Gestión — Instituto Profesional", 14, pageHeight - 7);
+        doc.text(`Página ${i} de ${totalPaginas}`, pageWidth - 14, pageHeight - 7, { align: "right" });
+      }
 
       doc.save(`asistencias_${cursoNombre.replace(/\s+/g, "_")}.pdf`);
     } catch (e) {
@@ -247,25 +322,52 @@ export default function AsistenciasPage() {
             {inscripcionesDelCurso.length === 0 && <EmptyState text="No hay alumnos inscriptos en este curso" />}
             {inscripcionesDelCurso.map((ins) => {
               const isPresente = asistenciasDelDia[ins.id] ?? true;
+              const isJustificada = justificadasDelDia[ins.id] ?? false;
               return (
                 <div key={ins.id} className="px-5 py-3 flex items-center justify-between text-sm hover:bg-slate-50">
                   <span className="font-medium text-slate-800">{getNombreAlumno(ins.alumno_id)}</span>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
-                      checked={isPresente}
-                      onChange={(e) => {
-                        setAsistenciasDelDia({
-                          ...asistenciasDelDia,
-                          [ins.id]: e.target.checked
-                        });
-                      }}
-                    />
-                    <span className={isPresente ? "text-emerald-600 font-medium" : "text-rose-600 font-medium"}>
-                      {isPresente ? "Presente" : "Ausente"}
-                    </span>
-                  </label>
+                  <div className="flex items-center gap-4">
+                    {!isPresente && (
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4 text-amber-500 rounded border-slate-300 focus:ring-amber-400"
+                          checked={isJustificada}
+                          onChange={(e) => {
+                            setJustificadasDelDia({
+                              ...justificadasDelDia,
+                              [ins.id]: e.target.checked
+                            });
+                          }}
+                        />
+                        <span className="text-amber-600 font-medium">Ausencia justificada</span>
+                      </label>
+                    )}
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
+                        checked={isPresente}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setAsistenciasDelDia({
+                            ...asistenciasDelDia,
+                            [ins.id]: checked
+                          });
+                          if (checked) {
+                            // Si vuelve a estar presente, la justificación deja de aplicar
+                            setJustificadasDelDia({
+                              ...justificadasDelDia,
+                              [ins.id]: false
+                            });
+                          }
+                        }}
+                      />
+                      <span className={isPresente ? "text-emerald-600 font-medium" : "text-rose-600 font-medium"}>
+                        {isPresente ? "Presente" : "Ausente"}
+                      </span>
+                    </label>
+                  </div>
                 </div>
               );
             })}

@@ -102,6 +102,7 @@ export interface AsistenciaAlumno {
   inscripcion_id: number;
   fecha: string;
   presente: boolean;
+  justificada: boolean;
 }
 
 export interface Gasto {
