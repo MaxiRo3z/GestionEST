@@ -1,0 +1,69 @@
+name: Backup base de datos (Neon)
+
+# Corre todos los días a las 06:00 UTC (03:00 hora Argentina) y también
+# se puede disparar a mano desde la pestaña "Actions" de GitHub para
+# probar que todo funcione sin esperar al horario programado.
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Instalar cliente de PostgreSQL y GPG
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client gnupg
+
+      - name: Generar el dump de la base
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DATABASE_URL:-}" ]; then
+            echo "Falta el secret NEON_DATABASE_URL" >&2
+            exit 1
+          fi
+          TIMESTAMP=$(date -u +"%Y-%m-%d_%H%M%S")
+          FILE="gestionest_${TIMESTAMP}.dump"
+          pg_dump "$DATABASE_URL" -Fc -f "$FILE"
+          echo "BACKUP_FILE=$FILE" >> "$GITHUB_ENV"
+
+      - name: Cifrar el backup (AES-256, GPG simétrico)
+        env:
+          PASSPHRASE: ${{ secrets.BACKUP_GPG_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          if [ -z "${PASSPHRASE:-}" ]; then
+            echo "Falta el secret BACKUP_GPG_PASSPHRASE" >&2
+            exit 1
+          fi
+          gpg --batch --yes --symmetric --cipher-algo AES256 \
+              --passphrase "$PASSPHRASE" "$BACKUP_FILE"
+          rm "$BACKUP_FILE"
+          echo "BACKUP_FILE=${BACKUP_FILE}.gpg" >> "$GITHUB_ENV"
+
+      - name: Subir al repo privado de backups
+        env:
+          TOKEN: ${{ secrets.BACKUP_REPO_TOKEN }}
+          BACKUP_REPO: ${{ vars.BACKUP_REPO || 'MaxiRo3z/gestionest-backups' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${TOKEN:-}" ]; then
+            echo "Falta el secret BACKUP_REPO_TOKEN" >&2
+            exit 1
+          fi
+          git clone "https://x-access-token:${TOKEN}@github.com/${BACKUP_REPO}.git" backups-repo
+          mkdir -p backups-repo/daily
+          mv "$BACKUP_FILE" backups-repo/daily/
+          cd backups-repo
+
+          # Retención: se guardan los últimos 30 backups diarios. Los más
+          # viejos se borran para no hacer crecer el repo indefinidamente.
+          ls -1 daily | sort | head -n -30 | xargs -r -I{} rm -- "daily/{}"
+
+          git config user.name "gestionest-backup-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "Backup $(date -u +'%Y-%m-%d %H:%M UTC')" || echo "Sin cambios para commitear"
+          git push
