@@ -26,6 +26,7 @@ jobs:
             | sudo tee /etc/apt/sources.list.d/pgdg.list
           sudo apt-get update
           sudo apt-get install -y postgresql-client-17 gnupg
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
 
       - name: Generar el dump de la base
         env:
@@ -36,6 +37,8 @@ jobs:
             echo "Falta el secret NEON_DATABASE_URL" >&2
             exit 1
           fi
+          echo "Usando: $(command -v pg_dump)"
+          pg_dump --version
           TIMESTAMP=$(date -u +"%Y-%m-%d_%H%M%S")
           FILE="gestionest_${TIMESTAMP}.dump"
           pg_dump "$DATABASE_URL" -Fc -f "$FILE"
