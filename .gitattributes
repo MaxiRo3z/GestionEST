@@ -1,0 +1,12 @@
+# Normaliza los finales de linea a LF en el repo, sin importar el SO
+# o el editor que toque los archivos (evita diffs falsos como el de
+# Windows/CRLF).
+* text=auto eol=lf
+
+# Binarios: que Git no intente normalizarlos ni diffearlos como texto
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
