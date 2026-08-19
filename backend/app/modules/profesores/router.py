@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from app.db.session import get_db
 from app.modules.profesores.models import Profesor, AsistenciaProfesor, Liquidacion
 from app.modules.profesores.schemas import (
-    ProfesorCreate, ProfesorOut, AsistenciaProfesorCreate, AsistenciaProfesorOut,
+    ProfesorCreate, ProfesorUpdate, ProfesorOut, AsistenciaProfesorCreate, AsistenciaProfesorOut,
     AsistenciaProfesorUpdate, GenerarLiquidacionIn, LiquidacionOut, LiquidacionUpdate
 )
 from app.modules.profesores import service
@@ -26,6 +26,29 @@ def crear_profesor(data: ProfesorCreate, db: Session = Depends(get_db)):
     profesor = Profesor(**data.model_dump())
     db.add(profesor)
     db.commit()
+    db.refresh(profesor)
+    return profesor
+
+
+@router.put("/{profesor_id}", response_model=ProfesorOut)
+def editar_profesor(profesor_id: int, data: ProfesorUpdate, db: Session = Depends(get_db)):
+    """Corrige nombre, DNI, valor/hora o estado (activo/inactivo) de un
+    profesor ya cargado — pensado para arreglar errores de tipeo al ingresar
+    los datos, sin tener que borrar y volver a crear el registro."""
+    profesor = db.get(Profesor, profesor_id)
+    if not profesor:
+        raise HTTPException(404, "Profesor no encontrado")
+
+    profesor.nombre = data.nombre
+    profesor.dni = data.dni
+    profesor.valor_hora = data.valor_hora
+    profesor.activo = data.activo
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(400, "Ya existe otro profesor con ese DNI.")
     db.refresh(profesor)
     return profesor
 
@@ -109,7 +132,7 @@ def editar_liquidacion(liquidacion_id: int, data: LiquidacionUpdate, db: Session
     liq = db.get(Liquidacion, liquidacion_id)
     if not liq:
         raise HTTPException(404, "Liquidación no encontrada")
-    
+
     if liq.pagado:
         raise HTTPException(status_code=400, detail="No se puede modificar una liquidación que ya ha sido pagada.")
 
@@ -129,7 +152,7 @@ def editar_liquidacion(liquidacion_id: int, data: LiquidacionUpdate, db: Session
     # de nuevo acá (si se restara, se estaría descontando dos veces).
     liq.valor_bruto = liq.horas_totales * profesor.valor_hora
     liq.valor_neto = liq.valor_bruto
-    
+
     db.commit()
     db.refresh(liq)
     return liq

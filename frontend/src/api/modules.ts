@@ -69,6 +69,8 @@ export const ProfesoresApi = {
   listar: () => api.get<Profesor[]>("/api/profesores"),
   crear: (data: { nombre: string; dni?: string; valor_hora: string }) =>
     api.post<Profesor>("/api/profesores", data),
+  modificar: (id: number, data: { nombre: string; dni?: string; valor_hora: string; activo: boolean }) =>
+    api.put<Profesor>(`/api/profesores/${id}`, data),
   cargarAsistencia: (data: {
     profesor_id: number; curso_id: number; fecha: string;
     horas_asignadas: string; horas_trabajadas: string; observacion?: string;
@@ -88,7 +90,7 @@ export const ProfesoresApi = {
     api.get<Liquidacion[]>(`/api/profesores/liquidaciones${profesorId ? `?profesor_id=${profesorId}` : ""}`),
   marcarLiquidacionPagada: (id: number) =>
     api.post<Liquidacion>(`/api/profesores/liquidaciones/${id}/marcar-pagada`),
-  modificarLiquidacion: (id: number, data: { horas_totales: string | number; descuentos: string | number }) => 
+  modificarLiquidacion: (id: number, data: { horas_totales: string | number; descuentos: string | number }) =>
     api.put<Liquidacion>(`/api/profesores/liquidaciones/${id}`, data),
 };
 
@@ -102,15 +104,15 @@ export const AsistenciasAlumnosApi = {
 
 // ---- Gastos y caja ----
 export const GastosApi = {
-  listar: (anio: number, mes: number) => 
+  listar: (anio: number, mes: number) =>
     api.get<Gasto[]>(`/api/gastos?anio=${anio}&mes=${mes}`),
   crear: (data: { categoria: string; descripcion?: string; monto: string; fecha: string; recurrente: boolean }) =>
     api.post<Gasto>("/api/gastos", data),
   modificar: (id: number, data: { categoria: string; descripcion?: string; monto: string; fecha: string; recurrente: boolean }) =>
     api.put<Gasto>(`/api/gastos/${id}`, data),
-  eliminar: (id: number) => 
+  eliminar: (id: number) =>
     api.del(`/api/gastos/${id}`),
-  balance: (anio: number, mes: number) => 
+  balance: (anio: number, mes: number) =>
     api.get<Balance>(`/api/gastos/balance?anio=${anio}&mes=${mes}`),
 };
 

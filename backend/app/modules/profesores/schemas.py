@@ -9,6 +9,15 @@ class ProfesorCreate(BaseModel):
     valor_hora: Decimal
 
 
+class ProfesorUpdate(BaseModel):
+    """Edición de la ficha del profesor (corrige errores de tipeo en nombre,
+    DNI o valor/hora sin tener que borrar y volver a cargar el registro)."""
+    nombre: str
+    dni: str | None = None
+    valor_hora: Decimal
+    activo: bool = True
+
+
 class ProfesorOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int

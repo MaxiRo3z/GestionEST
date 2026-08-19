@@ -11,6 +11,7 @@ export default function ProfesoresPage() {
   const error = errorProfesores || errorCursos;
 
   const [showCreate, setShowCreate] = useState(false);
+  const [editTarget, setEditTarget] = useState<Profesor | null>(null);
   const [asistenciaTarget, setAsistenciaTarget] = useState<Profesor | null>(null);
   const [showCargaDia, setShowCargaDia] = useState(false);
   const [verAsistencias, setVerAsistencias] = useState<Profesor | null>(null);
@@ -45,10 +46,14 @@ export default function ProfesoresPage() {
           {profesores.map((p) => (
             <div key={p.id} className="px-5 py-4 flex items-center justify-between">
               <div>
-                <p className="font-medium text-slate-800">{p.nombre}</p>
+                <div className="flex items-center gap-2">
+                  <p className="font-medium text-slate-800">{p.nombre}</p>
+                  {!p.activo && <Badge tone="slate">Inactivo</Badge>}
+                </div>
                 <p className="text-xs text-slate-400">{p.dni ? `DNI ${p.dni} · ` : ""}{formatMoney(p.valor_hora)} / hora</p>
               </div>
               <div className="flex gap-2">
+                <Button variant="secondary" onClick={() => setEditTarget(p)}>Editar</Button>
                 <Button variant="secondary" onClick={() => setVerAsistencias(p)}>Ver asistencias</Button>
                 <Button onClick={() => setAsistenciaTarget(p)}>Cargar asistencia</Button>
               </div>
@@ -58,6 +63,7 @@ export default function ProfesoresPage() {
       </Card>
 
       <CrearProfesorModal open={showCreate} onClose={() => setShowCreate(false)} onCreated={() => { setShowCreate(false); cargar(); }} />
+      <EditarProfesorModal profesor={editTarget} onClose={() => setEditTarget(null)} onSaved={() => { setEditTarget(null); cargar(); }} />
       <CargarAsistenciaModal profesor={asistenciaTarget} cursos={cursos} onClose={() => setAsistenciaTarget(null)} />
       <CargarAsistenciaDiaModal open={showCargaDia} profesores={profesores} cursos={cursos} onClose={() => setShowCargaDia(false)} />
 
@@ -109,6 +115,70 @@ function CrearProfesorModal({ open, onClose, onCreated }: { open: boolean; onClo
         <Input label="Valor por hora" type="number" step="0.01" value={valorHora} onChange={setValorHora} required />
         <Button className="w-full" onClick={submit} disabled={saving || !nombre || !valorHora}>
           {saving ? "Guardando..." : "Crear profesor"}
+        </Button>
+      </div>
+    </Modal>
+  );
+}
+
+// Edición de la ficha del profesor: nombre, DNI, valor/hora y estado
+// (activo/inactivo). Pensado para corregir errores de tipeo al ingresar los
+// datos sin tener que borrar y volver a crear el registro (lo que perdería
+// el historial de asistencias y liquidaciones ya asociado a ese profesor).
+function EditarProfesorModal({
+  profesor, onClose, onSaved,
+}: { profesor: Profesor | null; onClose: () => void; onSaved: () => void }) {
+  const [nombre, setNombre] = useState("");
+  const [dni, setDni] = useState("");
+  const [valorHora, setValorHora] = useState("");
+  const [activo, setActivo] = useState("true");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  // Cada vez que se abre el modal con un profesor distinto, precarga sus
+  // datos actuales en el formulario.
+  useEffect(() => {
+    if (profesor) {
+      setNombre(profesor.nombre);
+      setDni(profesor.dni ?? "");
+      setValorHora(profesor.valor_hora);
+      setActivo(profesor.activo ? "true" : "false");
+      setError("");
+    }
+  }, [profesor]);
+
+  if (!profesor) return null;
+
+  const submit = async () => {
+    setError(""); setSaving(true);
+    try {
+      await ProfesoresApi.modificar(profesor.id, {
+        nombre, dni: dni || undefined, valor_hora: valorHora, activo: activo === "true",
+      });
+      onSaved();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal open={!!profesor} onClose={onClose} title={`Editar profesor · ${profesor.nombre}`}>
+      <div className="space-y-4">
+        {error && <ErrorBanner message={error} />}
+        <Input label="Nombre completo" value={nombre} onChange={setNombre} required />
+        <Input label="DNI" value={dni} onChange={setDni} />
+        <Input label="Valor por hora" type="number" step="0.01" value={valorHora} onChange={setValorHora} required />
+        <Select
+          label="Estado"
+          value={activo}
+          onChange={setActivo}
+          options={[{ value: "true", label: "Activo" }, { value: "false", label: "Inactivo" }]}
+          required
+        />
+        <Button className="w-full" onClick={submit} disabled={saving || !nombre || !valorHora}>
+          {saving ? "Guardando..." : "Guardar cambios"}
         </Button>
       </div>
     </Modal>
